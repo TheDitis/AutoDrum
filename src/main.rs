@@ -9,6 +9,7 @@ use btleplug::api::{Central, CharPropFlags, Manager as _, Peripheral, ScanFilter
 use btleplug::platform::Manager;
 use tokio::time;
 use uuid::{Uuid, uuid};
+use AutoDrum::midi_ble::MidiBle;
 
 const BASE_HIT_DURATION_SMALL: f32 = 0.0002;
 const BASE_HIT_DURATION_BIG: f32 = 0.005;
@@ -20,6 +21,13 @@ const BLE_MIDI_SERVICE_ID: Uuid = uuid!("03B80E5A-EDE8-4B33-A751-6CE34EC4C700");
 const BLE_MIDI_CHARACTERISTIC_ID: Uuid = uuid!("7772E5DB-3868-4112-A1A9-F2669D106BF3");
 
 async fn setup_midi_bluetooth() -> Result<(), Box<dyn Error>> {
+
+    let midi_ble_manager = MidiBle::new().await;
+    tokio::task::spawn_blocking(move || {
+        midi_ble_manager.init();
+    }).await.expect("Task panicked");
+
+
     let manager = Manager::new().await?;
     let adapter_list = manager.adapters().await?;
     if adapter_list.is_empty() {
@@ -39,16 +47,18 @@ async fn setup_midi_bluetooth() -> Result<(), Box<dyn Error>> {
         } else {
             // All peripheral devices in range.
             for peripheral in peripherals.iter() {
-                let properties = peripheral.properties().await?;
-                let is_connected = peripheral.is_connected().await?;
-                let local_name = properties
-                    .unwrap()
-                    .local_name
-                    .unwrap_or(String::from("(peripheral name unknown)"));
-                println!(
-                    "Peripheral {:?} is connected: {:?}",
-                    &local_name, is_connected
-                );
+                let properties = peripheral.properties().await?.unwrap();
+                if properties.manufacturer_data.len() > 0 {
+                    println!("peripheral : {:?}", peripheral);
+                    peripheral.discover_services().await?;
+                    let characteristics = peripheral.characteristics();
+                    for characteristic in characteristics.iter() {
+                        if characteristic.uuid == BLE_MIDI_CHARACTERISTIC_ID {
+                            let data = peripheral.read(characteristic).await?;
+                            println!("MIDI data: {:?}", data);
+                        }
+                    }
+                }
             }
         }
     }
