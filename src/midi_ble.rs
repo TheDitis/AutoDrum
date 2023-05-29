@@ -171,50 +171,50 @@ impl MidiBle {
 
         loop {
             tokio::select! {
-            _ = lines.next_line() => break,
-            evt = char_control.next() => {
-                match evt {
-                    Some(CharacteristicControlEvent::Write(req)) => {
-                        println!("Accepting write request event with MTU {}", req.mtu());
-                        read_buf = vec![0; req.mtu()];
-                        reader_opt = Some(req.accept()?);
-                    },
-                    Some(CharacteristicControlEvent::Notify(notifier)) => {
-                        println!("Accepting notify request event with MTU {}", notifier.mtu());
-                        writer_opt = Some(notifier);
-                    },
-                    None => break,
-                }
-            },
-            read_res = async {
-                match &mut reader_opt {
-                    Some(reader) if writer_opt.is_some() => reader.read(&mut read_buf).await,
-                    _ => future::pending().await,
-                }
-            } => {
-                match read_res {
-                    Ok(0) => {
-                        println!("Read stream ended");
-                        reader_opt = None;
+                _ = lines.next_line() => break,
+                evt = char_control.next() => {
+                    match evt {
+                        Some(CharacteristicControlEvent::Write(req)) => {
+                            println!("Accepting write request event with MTU {}", req.mtu());
+                            read_buf = vec![0; req.mtu()];
+                            reader_opt = Some(req.accept()?);
+                        },
+                        Some(CharacteristicControlEvent::Notify(notifier)) => {
+                            println!("Accepting notify request event with MTU {}", notifier.mtu());
+                            writer_opt = Some(notifier);
+                        },
+                        None => break,
                     }
-                    Ok(n) => {
-                        let value = read_buf[..n].to_vec();
-                        println!("Echoing {} bytes: {:x?} ... {:x?}", value.len(), &value[0..4.min(value.len())], &value[value.len().saturating_sub(4) ..]);
-                        if value.len() < 512 {
-                            println!();
-                        }
-                        if let Err(err) = writer_opt.as_mut().unwrap().write_all(&value).await {
-                            println!("Write failed: {}", &err);
-                            writer_opt = None;
-                        }
+                },
+                read_res = async {
+                    match &mut reader_opt {
+                        Some(reader) if writer_opt.is_some() => reader.read(&mut read_buf).await,
+                        _ => future::pending().await,
                     }
-                    Err(err) => {
-                        println!("Read stream error: {}", &err);
-                        reader_opt = None;
+                } => {
+                    match read_res {
+                        Ok(0) => {
+                            println!("Read stream ended");
+                            reader_opt = None;
+                        }
+                        Ok(n) => {
+                            let value = read_buf[..n].to_vec();
+                            println!("Echoing {} bytes: {:x?} ... {:x?}", value.len(), &value[0..4.min(value.len())], &value[value.len().saturating_sub(4) ..]);
+                            if value.len() < 512 {
+                                println!();
+                            }
+                            if let Err(err) = writer_opt.as_mut().unwrap().write_all(&value).await {
+                                println!("Write failed: {}", &err);
+                                writer_opt = None;
+                            }
+                        }
+                        Err(err) => {
+                            println!("Read stream error: {}", &err);
+                            reader_opt = None;
+                        }
                     }
                 }
             }
-        }
         }
 
         println!("Removing service and advertisement");
