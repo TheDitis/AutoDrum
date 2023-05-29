@@ -22,46 +22,45 @@ const BLE_MIDI_CHARACTERISTIC_ID: Uuid = uuid!("7772E5DB-3868-4112-A1A9-F2669D10
 
 async fn setup_midi_bluetooth() -> Result<(), Box<dyn Error>> {
 
-    let midi_ble_manager = MidiBle::new().await;
+    let mut midi_ble_manager = MidiBle::new().await;
     tokio::task::spawn_blocking(move || {
         midi_ble_manager.init();
     }).await.expect("Task panicked");
 
 
-    let manager = Manager::new().await?;
-    let adapter_list = manager.adapters().await?;
-    if adapter_list.is_empty() {
-        eprintln!("No Bluetooth adapters found");
-    }
-
-    for adapter in adapter_list.iter() {
-        println!("Starting scan...");
-        adapter
-            .start_scan(ScanFilter::default())
-            .await
-            .expect("Can't scan BLE adapter for connected devices...");
-        time::sleep(Duration::from_secs(2)).await;
-        let peripherals = adapter.peripherals().await?;
-        if peripherals.is_empty() {
-            eprintln!("->>> BLE peripheral devices were not found, sorry. Exiting...");
-        } else {
-            // All peripheral devices in range.
-            for peripheral in peripherals.iter() {
-                let properties = peripheral.properties().await?.unwrap();
-                if properties.manufacturer_data.len() > 0 {
-                    println!("peripheral : {:?}", peripheral);
-                    peripheral.discover_services().await?;
-                    let characteristics = peripheral.characteristics();
-                    for characteristic in characteristics.iter() {
-                        if characteristic.uuid == BLE_MIDI_CHARACTERISTIC_ID {
-                            let data = peripheral.read(characteristic).await?;
-                            println!("MIDI data: {:?}", data);
-                        }
-                    }
-                }
-            }
-        }
-    }
+    // let manager = Manager::new().await?;
+    // let adapter_list = manager.adapters().await?;
+    // if adapter_list.is_empty() {
+    //     eprintln!("No Bluetooth adapters found");
+    // }
+    // for adapter in adapter_list.iter() {
+    //     println!("Starting scan...");
+    //     adapter
+    //         .start_scan(ScanFilter::default())
+    //         .await
+    //         .expect("Can't scan BLE adapter for connected devices...");
+    //     time::sleep(Duration::from_secs(2)).await;
+    //     let peripherals = adapter.peripherals().await?;
+    //     if peripherals.is_empty() {
+    //         eprintln!("->>> BLE peripheral devices were not found, sorry. Exiting...");
+    //     } else {
+    //         // All peripheral devices in range.
+    //         for peripheral in peripherals.iter() {
+    //             let properties = peripheral.properties().await?.unwrap();
+    //             // if properties.manufacturer_data.len() > 0 {
+    //             println!("peripheral : {:?}", peripheral.properties().await?);
+    //             peripheral.discover_services().await?;
+    //             let characteristics = peripheral.characteristics();
+    //             for characteristic in characteristics.iter() {
+    //                 if characteristic.uuid == BLE_MIDI_CHARACTERISTIC_ID {
+    //                     let data = peripheral.read(characteristic).await?;
+    //                     println!("MIDI data: {:?}", data);
+    //                 }
+    //             }
+    //             // }
+    //         }
+    //     }
+    // }
     Ok(())
 }
 
