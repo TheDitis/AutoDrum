@@ -1,3 +1,4 @@
+use std::error::Error;
 use bluer::{
     adv::Advertisement,
     gatt::{
@@ -19,6 +20,10 @@ use tokio::{
 };
 use uuid::{Uuid, uuid};
 use futures::{future, pin_mut, StreamExt};
+use rppal::gpio::Gpio;
+// use tokio_gpiod::{Chip, Options};
+use sysfs_gpio::{Direction, Pin};
+
 // use btleplug::api::{Characteristic, CharPropFlags};
 // use btleplug::api::{bleuuid::uuid_from_u16, Central, Manager as _, Peripheral as _, ScanFilter, WriteType};
 // use btleplug::platform::{Adapter, Manager, Peripheral};
@@ -26,9 +31,12 @@ use futures::{future, pin_mut, StreamExt};
 const BLE_MIDI_SERVICE_ID: Uuid = uuid!("03B80E5A-EDE8-4B33-A751-6CE34EC4C700");
 const BLE_MIDI_CHARACTERISTIC_ID: Uuid = uuid!("7772E5DB-3868-4112-A1A9-F2669D106BF3");
 
+const GPIO_LED: u8 = 4;
+
 pub struct MidiBle {
     midi_session: bluer::Session,
     advertisement_handle: Option<AdvertisementHandle>,
+    pin_num: u8,
     // midi_application: Application,
     // midi_service: Service,
     // midi_characteristic: Characteristic,
@@ -36,19 +44,37 @@ pub struct MidiBle {
 
 impl MidiBle {
     pub async fn new() -> MidiBle {
+        let mut pin = Gpio::new().unwrap().get(GPIO_LED).unwrap().into_output();
+
+        // Blink the LED by setting the pin's logic level high for 500 ms.
+        pin.set_high();
+        sleep(Duration::from_millis(500));
+        pin.set_low();
+
+
+
+
+        let my_led = Pin::new(GPIO_LED as u64); // number depends on chip, etc.
+        let status = &u8::from(0x90);
+        if status == &u8::from(0x90) {
+            my_led.set_value(u8::MAX);
+        } else {
+            my_led.set_value(0);
+        }
         MidiBle {
             midi_session: bluer::Session::new().await.unwrap(),
             advertisement_handle: None,
+            pin_num: GPIO_LED,
         }
     }
 
-    #[tokio::main]
-    pub async fn init(&mut self) -> bluer::Result<()> {
-        self.await_pair().await?;
+    #[tokio::main(flavor = "current_thread")]
+    pub async fn init(&mut self, hit: fn() -> ()) -> bluer::Result<()> {
+        self.await_pair(hit).await?;
         Ok(())
     }
 
-    async fn await_pair(&mut self) -> bluer::Result<()> {
+    async fn await_pair(&mut self, hit: fn() -> ()) -> bluer::Result<()> {
         let adapter = self.midi_session.default_adapter().await?;
         adapter.set_powered(true).await?;
         adapter.set_pairable(true).await?;
@@ -65,7 +91,11 @@ impl MidiBle {
         };
         println!("Advertisement: {:?}\n\n", &le_advertisement);
         self.advertisement_handle = Some(adapter.advertise(le_advertisement).await?);
-        self.setup_midi_gatt_service().await?;
+
+        // hit(4, &u8::from(0x90));
+        hit();
+
+        self.setup_midi_gatt_service(hit).await?;
 
 
         // let manager = Manager::new().await.unwrap();
@@ -119,23 +149,25 @@ impl MidiBle {
 
 
 
-        println!("Press enter to quit");
-        sleep(Duration::from_secs(20)).await;
-        let stdin = BufReader::new(tokio::io::stdin());
-        let mut lines = stdin.lines();
-        let _ = lines.next_line().await;
+        /// THIS ----
 
-        println!("Removing advertisement");
-        // drop(&self.advertisement_handle);
-        sleep(Duration::from_secs(1)).await;
-        // adapter.set_discoverable(false).await?;
+        // println!("Press enter to quit");
+        // let stdin = BufReader::new(tokio::io::stdin());
+        // let mut lines = stdin.lines();
+        // let _ = lines.next_line().await;
+        //
+        // println!("Removing advertisement");
+        // // drop(&self.advertisement_handle);
+        // sleep(Duration::from_secs(1)).await;
+        // // adapter.set_discoverable(false).await?;
+        /// THIS ABOVE ----
 
         Ok(())
     }
 
-    async fn setup_midi_gatt_service(&self) -> bluer::Result<()> {
+    async fn setup_midi_gatt_service(&self, hit: fn() -> ()) -> bluer::Result<()> {
         let adapter = self.midi_session.default_adapter().await?;
-        let application = MidiBle::midi_application().await;
+        let application = self.midi_application(hit).await;
 
         let app_handle = adapter.serve_gatt_application(application).await?;
 
@@ -255,24 +287,25 @@ impl MidiBle {
         // Ok(())
     }
 
-    async fn midi_application() -> Application {
+    async fn midi_application(&self, hit: fn() -> ()) -> Application {
         Application {
-            services: vec![MidiBle::midi_service().await],
+            services: vec![self.midi_service(hit).await],
             ..Default::default()
         }
     }
 
-    async fn midi_service() -> Service {
+    async fn midi_service(&self, hit: fn() -> ()) -> Service {
         Service {
             uuid: BLE_MIDI_SERVICE_ID,
             primary: true,
-            characteristics: vec![MidiBle::midi_characteristic().await],
+            characteristics: vec![self.midi_characteristic(hit).await],
             ..Default::default()
         }
     }
 
     // #[tokio::main(flavor = "current_thread")]
-    async fn midi_characteristic() -> Characteristic {
+    async fn midi_characteristic(&self, hit: fn() -> ()) -> Characteristic {
+        let pin_num = self.pin_num.clone();
         let value = Arc::new(Mutex::new(vec![0x10, 0x01, 0x01, 0x10]));
         let value_read = value.clone();
         let value_write = value.clone();
@@ -302,6 +335,21 @@ impl MidiBle {
                         println!("Write request {:?} with value {:x?}", &req, &new_value);
                         let mut value = value.lock().await;
                         *value = new_value;
+                        if let [.., status_byte, note_number, velocity] = &value[..] {
+                            // Blink the LED by setting the pin's logic level high for 500 ms.
+                            println!("status_byte: {:x?}, note: {:x?}, velocity: {:x?}", status_byte, note_number, velocity);
+                            hit()
+                            // hit(pin_num, status_byte);
+
+
+                            // let mut pin = Gpio::new().unwrap().get(GPIO_LED).unwrap().into_output();
+                            // println!("pin initialized");
+                            // pin.set_high();
+                            // println!("pin set HIGH");
+                            // sleep(Duration::from_millis(1000));
+                            // println!("pin set LOW");
+                            // pin.set_low();
+                        }
                         Ok(())
                     })
                 })),
@@ -342,3 +390,52 @@ impl MidiBle {
         }
     }
 }
+
+
+
+// async fn hit(pin_num: u8, status: &u8) -> Result<(), Box<dyn Error>> {
+//     // let mut pin = Gpio::new()?.get(pin_num)?.into_output();
+//     // // Blink the LED by setting the pin's logic level high for 500 ms.
+//     // println!("pin initialized");
+//     // println!("status_byte: {:x?}", status);
+//     // if status == &u8::from(0x90) {
+//     //     pin.set_high();
+//     //     println!("pin set HIGH");
+//     // } else if status == &u8::from(0x80) {
+//     //     pin.set_low();
+//     //     println!("pin set LOW");
+//     // }
+//     // // sleep(Dur ation::from_millis(500));
+//     // // println!("pin set LOW");
+//     // // pin.set_low();
+//
+//
+//
+//     // let chip = Chip::new("gpiochip0").await?; // open chip
+//     //
+//     // let opts = Options::output([GPIO_LED]) // configure lines offsets
+//     //     .values([false]) // optionally set initial values
+//     //     .consumer("my-outputs"); // optionally set consumer string
+//     //
+//     // let outputs = chip.request_lines(opts).await?;
+//     //
+//     // outputs.set_values([false]).await?;
+//
+//     let my_led = Pin::new(GPIO_LED as u64); // number depends on chip, etc.
+//     if status == &u8::from(0x90) {
+//         my_led.set_value(u8::MAX);
+//     } else {
+//         my_led.set_value(0);
+//     }
+//     // my_led.with_exported(|| {
+//     //     my_led.set_direction(Direction::Out).unwrap();
+//     //     loop {
+//     //         my_led.set_value(0).unwrap();
+//     //         sleep(Duration::from_millis(200));
+//     //         my_led.set_value(1).unwrap();
+//     //         sleep(Duration::from_millis(200));
+//     //     }
+//     // }).unwrap();
+//
+//     Ok(())
+// }
