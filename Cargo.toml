@@ -8,9 +8,6 @@ edition = "2021"
 [dependencies]
 rppal = "0.14.1"
 bluer = { version = "0.15.7", features = ["full"] }
-btleplug = "0.10.5"
 tokio = { version = "1.28.1", features = ["full"] }
 uuid = "1.3.1"
 futures = "0.3.28"
-sysfs_gpio = "0.6.1"
-tokio-gpiod = "0.2.3"
