@@ -36,7 +36,6 @@ pub struct MidiBle {
     app_handle: Option<ApplicationHandle>,
     advertisement_handle: Option<AdvertisementHandle>,
     pub tx: tokio::sync::broadcast::Sender<MIDIEvent>,
-    // rx: Arc<Mutex<tokio::sync::mpsc::Receiver<MIDIEvent>>>,
 }
 
 impl MidiBle {
@@ -47,7 +46,6 @@ impl MidiBle {
             app_handle: None,
             advertisement_handle: None,
             tx,
-            // rx: Arc::new(Mutex::new(rx)),
         }
     }
 
@@ -67,7 +65,6 @@ impl MidiBle {
         let le_advertisement = Advertisement {
             advertisement_type: bluer::adv::Type::Peripheral,
             service_uuids: vec!["03B80E5A-EDE8-4B33-A751-6CE34EC4C700".parse().unwrap()].into_iter().collect(),
-            // solicit_uuids: vec!["03B80E5A-EDE8-4B33-A751-6CE34EC4C700".parse().unwrap()].into_iter().collect(),
             discoverable: Some(true),
             local_name: Some("AutoDrum".to_string()),
             ..Default::default()
@@ -75,8 +72,6 @@ impl MidiBle {
         println!("Advertisement: {:?}\n\n", &le_advertisement);
         self.advertisement_handle = Some(adapter.advertise(le_advertisement).await?);
 
-        // hit(4, &u8::from(0x90));
-        // hit(1);
         match self.tx.send((1, 1, 1)) {
             Ok(_) => println!("Sent over tx"),
             Err(e) => println!("Error sending over tx: {}", e),
@@ -92,100 +87,6 @@ impl MidiBle {
         let application = self.midi_application().await;
 
         self.app_handle = Some(adapter.serve_gatt_application(application).await?);
-
-
-        // let status_byte = 0x90;  // Note on event on channel 1 (channels are 0-indexed)
-        // let timestamp_byte = 0x80;  // A timestamp value. In practice, you should calculate this properly.
-        // let note_number = 60;
-        // let velocity = 127;
-        //
-        // let characteristic = MidiBler::midi_characteristic().await;
-        //
-        // let devices = adapter.discover_devices().await?;
-
-
-
-        /// MINIMAL LOOP THAT STILL WORKS
-        // println!("Echo service ready. Press enter to quit.");
-        // let stdin = BufReader::new(tokio::io::stdin());
-        // let mut lines = stdin.lines();
-        //
-        // loop {
-        //     tokio::select! {
-        //         _ = lines.next_line() => break,
-        //     }
-        // }
-
-
-        // /// _-----------
-        // /// THIS SHOULD BE PUT BACK
-        // /// _-----------
-        //
-        // println!("Serving GATT echo service on Bluetooth adapter {}", adapter.name());
-        // let (char_control, char_handle) = characteristic_control();
-        //
-        //
-        // println!("Echo service ready. Press enter to quit.");
-        // let stdin = BufReader::new(tokio::io::stdin());
-        // let mut lines = stdin.lines();
-        //
-        // let mut read_buf = Vec::new();
-        // let mut reader_opt: Option<CharacteristicReader> = None;
-        // let mut writer_opt: Option<CharacteristicWriter> = None;
-        // pin_mut!(char_control);
-        //
-        // loop {
-        //     tokio::select! {
-        //         _ = lines.next_line() => break,
-        //         evt = char_control.next() => {
-        //             match evt {
-        //                 Some(CharacteristicControlEvent::Write(req)) => {
-        //                     println!("Accepting write request event with MTU {}", req.mtu());
-        //                     read_buf = vec![0; req.mtu()];
-        //                     reader_opt = Some(req.accept()?);
-        //                 },
-        //                 Some(CharacteristicControlEvent::Notify(notifier)) => {
-        //                     println!("Accepting notify request event with MTU {}", notifier.mtu());
-        //                     writer_opt = Some(notifier);
-        //                 },
-        //                 None => break,
-        //             }
-        //         },
-        //         read_res = async {
-        //             match &mut reader_opt {
-        //                 Some(reader) if writer_opt.is_some() => reader.read(&mut read_buf).await,
-        //                 _ => future::pending().await,
-        //             }
-        //         } => {
-        //             match read_res {
-        //                 Ok(0) => {
-        //                     println!("Read stream ended");
-        //                     reader_opt = None;
-        //                 }
-        //                 Ok(n) => {
-        //                     let value = read_buf[..n].to_vec();
-        //                     println!("Echoing {} bytes: {:x?} ... {:x?}", value.len(), &value[0..4.min(value.len())], &value[value.len().saturating_sub(4) ..]);
-        //                     if value.len() < 512 {
-        //                         println!();
-        //                     }
-        //                     if let Err(err) = writer_opt.as_mut().unwrap().write_all(&value).await {
-        //                         println!("Write failed: {}", &err);
-        //                         writer_opt = None;
-        //                     }
-        //                 }
-        //                 Err(err) => {
-        //                     println!("Read stream error: {}", &err);
-        //                     reader_opt = None;
-        //                 }
-        //             }
-        //         }
-        //     }
-        // }
-        //
-        // println!("Removing service and advertisement");
-        // // drop(app_handle);
-        // sleep(Duration::from_secs(1)).await;
-
         Ok(())
     }
 

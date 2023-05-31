@@ -30,24 +30,12 @@ struct AutoDrum {
 impl AutoDrum {
     pub async fn new() -> Self {
         let mut midi_ble_manager = MidiBle::new().await;
-        // tokio::task::spawn_blocking(move || {
         AutoDrum {
             midi_ble_manager,
         }
     }
 
     pub async fn run(&mut self) {
-        // let hit_func = |note| async {
-        //     // let mut pin = Gpio::new().unwrap().get(GPIO_LED).unwrap().into_output();
-        //     //
-        //     // // Blink the LED by setting the pin's logic level high for 500 ms.
-        //     // pin.set_high();
-        //     // thread::sleep(Duration::from_millis(100));
-        //     // pin.set_low();
-        //     AutoDrum::handle_note(note)
-        // };
-
-
         self.midi_ble_manager.init().await.expect("Task panicked in MidiBle.init()");
         println!("Echo service ready. Press enter to quit.");
         let stdin = BufReader::new(tokio::io::stdin());
@@ -71,17 +59,24 @@ impl AutoDrum {
                 }
             }
         }
-
-        // hit_func(1);
     }
 
-    pub async fn handle_note(note: (u8, u8, u8)) {
+    pub async fn handle_note(midi_data: (u8, u8, u8)) {
         let mut pin = Gpio::new().unwrap().get(GPIO_LED).unwrap().into_output();
+        let (status, note, velocity) = midi_data;
 
+        if (status == 0x90) {
+            println!("Note on: {:?} {:?}", note, velocity);
+            pin.set_high();
+        } else if (status == 0x80) {
+            println!("Note off: {:?} {:?}", note, velocity);
+            pin.set_low();
+        } else {
+            println!("Unknown status: {:?}", status);
+            pin.set_low();
+        }
         // Blink the LED by setting the pin's logic level high for 500 ms.
-        pin.set_high();
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        pin.set_low();
+        // tokio::time::sleep(Duration::from_millis(100)).await;
     }
 
     pub fn stop(&mut self) {
@@ -97,44 +92,6 @@ impl Drop for AutoDrum {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    // let hit_func = || {
-    //     let mut pin = Gpio::new().unwrap().get(GPIO_LED).unwrap().into_output();
-    //
-    //     // Blink the LED by setting the pin's logic level high for 500 ms.
-    //     pin.set_high();
-    //     thread::sleep(Duration::from_millis(100));
-    //     pin.set_low();
-    // };
-    //
-    // // // setup_midi_bluetooth(hit_func).await?;
-    // let mut midi_ble_manager = MidiBle::new().await;
-    // // tokio::task::spawn_blocking(move || {
-    // midi_ble_manager.init(hit_func).await;
-    // //     /// TOOO: HERE, seems like passing the function to turn on/off gpio works
-    // // }).await.expect("Task panicked");
-    //
-    //
-    // println!("Echo service ready. Press enter to quit.");
-    // let stdin = BufReader::new(tokio::io::stdin());
-    // let mut lines = stdin.lines();
-    //
-    // loop {
-    //     tokio::select! {
-    //         _ = lines.next_line() => break,
-    //     }
-    // }
-    //
-    // hit_func();
-    //
-    //
-    //
-    //
-    // // let mut pin = Gpio::new()?.get(GPIO_LED)?.into_output();
-    // //
-    // // // Blink the LED by setting the pin's logic level high for 500 ms.
-    // // pin.set_high();
-    // // thread::sleep(Duration::from_millis(500));
-    // // pin.set_low();
     let mut app = AutoDrum::new().await;
     app.run().await;
     app.stop();
