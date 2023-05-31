@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 use std::error::Error;
-use std::future::Future;
-use std::pin::Pin;
 use std::thread;
 use std::thread::sleep;
 use std::time::Duration;
@@ -10,9 +8,7 @@ use rppal::gpio::{Gpio, OutputPin};
 use rppal::system::DeviceInfo;
 
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
-use tokio::time;
 use uuid::{Uuid, uuid};
-use tokio_gpiod::{Chip, Options, Output};
 use crate::midi_ble::MidiBle;
 use crate::drum::Drum;
 
@@ -25,14 +21,17 @@ const GPIO_LED: u8 = 4;
 
 pub struct AutoDrum {
     midi_ble_manager: MidiBle,
-    // drums: HashMap<u8, Drum>
+    drums: HashMap<u8, Drum>
 }
 
 impl AutoDrum {
     pub async fn new() -> Self {
         let mut midi_ble_manager = MidiBle::new().await;
+        let mut drums = HashMap::new();
+        drums.insert(84, Drum::new(4));
         AutoDrum {
             midi_ble_manager,
+            drums,
         }
     }
 
@@ -51,7 +50,7 @@ impl AutoDrum {
                     match read_res {
                         Ok(note) => {
                             println!("Received note: {:?}", note);
-                            AutoDrum::handle_note(note).await
+                            self.handle_note(note).await
                         },
                         Err(e) => {
                             println!("Error: {:?}", e);
@@ -62,31 +61,17 @@ impl AutoDrum {
         }
     }
 
-    pub async fn handle_note(midi_data: (u8, u8, u8)) {
-        let mut drum = Drum::new(GPIO_LED);
+    pub async fn handle_note(&mut self, midi_data: (u8, u8, u8)) {
         let (status, note, velocity) = midi_data;
-        if (status == 0x90) {
-            drum.hit(midi_data.2).await;
+        if status == 0x90 {
+            if let Some(drum) = self.drums.get_mut(&note) {
+                drum.hit(velocity).await;
+            }
         }
-        // let mut pin = Gpio::new().unwrap().get(GPIO_LED).unwrap().into_output();
-        //
-        // if (status == 0x90) {
-        //     println!("Note on: {:?} {:?}", note, velocity);
-        //     pin.set_high();
-        // } else if (status == 0x80) {
-        //     println!("Note off: {:?} {:?}", note, velocity);
-        //     pin.set_low();
-        // } else {
-        //     println!("Unknown status: {:?}", status);
-        //     pin.set_low();
-        // }
-        // // Blink the LED by setting the pin's logic level high for 500 ms.
-        // // tokio::time::sleep(Duration::from_millis(100)).await;
     }
 
     pub fn stop(&mut self) {
-        let mut pin = Gpio::new().unwrap().get(GPIO_LED).unwrap().into_output();
-        pin.set_low();
+        self.drums.iter_mut().for_each(|(_, drum)| drum.abort());
     }
 }
 impl Drop for AutoDrum {

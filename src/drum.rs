@@ -23,10 +23,11 @@ impl Drum {
         let duration = self.striker.get_duration(velocity);
         println!("Hitting drum for {}ms", duration);
         self.pin.set_high();
-        // TODO: switch vars to ms
-        // tokio::time::sleep(Duration::from_millis((duration as u64) * 100000000)).await;
-        sleep(Duration::from_millis(duration));
+        tokio::time::sleep(Duration::from_millis((duration as u64) * 1)).await;
         println!("Done hitting drum");
+        self.pin.set_low();
+    }
+    pub fn abort(&mut self) {
         self.pin.set_low();
     }
 }
