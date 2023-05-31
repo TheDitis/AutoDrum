@@ -31,3 +31,9 @@ impl Drum {
         self.pin.set_low();
     }
 }
+
+impl Drop for Drum {
+    fn drop(&mut self) {
+        self.pin.set_low();
+    }
+}
