@@ -3,7 +3,18 @@
 version = 3
 
 [[package]]
-name = "AutoDrum"
+name = "async-trait"
+version = "0.1.68"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9ccdd8f2a161be9bd5c023df56f1b2a0bd1d83872ae53b71a84a12c9bf6e842"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.18",
+]
+
+[[package]]
+name = "auto_drum"
 version = "0.1.0"
 dependencies = [
  "bluer",
@@ -14,17 +25,6 @@ dependencies = [
  "tokio",
  "tokio-gpiod",
  "uuid",
-]
-
-[[package]]
-name = "async-trait"
-version = "0.1.68"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b9ccdd8f2a161be9bd5c023df56f1b2a0bd1d83872ae53b71a84a12c9bf6e842"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.18",
 ]
 
 [[package]]

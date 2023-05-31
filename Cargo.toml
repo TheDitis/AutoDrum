@@ -1,5 +1,5 @@
 [package]
-name = "AutoDrum"
+name = "auto_drum"
 version = "0.1.0"
 edition = "2021"
 
