@@ -11,6 +11,7 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use uuid::{Uuid, uuid};
 use crate::midi_ble::MidiBle;
 use crate::drum::Drum;
+use crate::striker::Striker;
 
 const BASE_HIT_DURATION_SMALL: f32 = 0.0002;
 const BASE_HIT_DURATION_BIG: f32 = 0.005;
@@ -28,11 +29,14 @@ impl AutoDrum {
     pub async fn new() -> Self {
         let mut midi_ble_manager = MidiBle::new().await;
         let mut drums = HashMap::new();
-        drums.insert(84, Drum::new(4));
         AutoDrum {
             midi_ble_manager,
             drums,
         }
+    }
+
+    pub fn add_drum(&mut self, note: u8, pin_num: u8, striker_kind: Striker) {
+        self.drums.insert(note, Drum::new(note, pin_num, striker_kind));
     }
 
     pub async fn run(&mut self) {
