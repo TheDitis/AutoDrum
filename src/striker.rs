@@ -11,14 +11,14 @@ impl Striker {
 
     fn min_hit_duration(&self) -> f64 {
         (match self {
-            Striker::SolenoidBig => 1200,
+            Striker::SolenoidBig => 1_000_000,
             Striker::SolenoidSmall => 30,
         }) as f64 / 100.0
     }
 
     fn max_hit_duration_variation(&self) -> f64 {
         (match self {
-            Striker::SolenoidBig => 1000,
+            Striker::SolenoidBig => 800_000,
             Striker::SolenoidSmall => 200,
         }) as f64 / 100.0
     }
