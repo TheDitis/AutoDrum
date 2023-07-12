@@ -172,13 +172,15 @@ impl MidiBle {
                                         let mut value = value.lock().await;
                                         *value = new_value;
                                         let status_byte = value[2];
-                                        if let pair = value.drain(3..=4).as_slice().chunks(2).nth(0).unwrap() {
+
+                                        // Excluding the timestamp bytes and status byte, iterate over pairs of note number and velocity
+                                        value[3..].chunks(2).for_each(|pair| {
                                             println!("Pair: {:?}", pair);
                                             let note_number = pair[0];
                                             let velocity = pair[1];
                                             println!("[{:?}]: Sending message on tx: status_byte: {:x?}, note: {:x?}, velocity: {:x?}", std::time::SystemTime::now(), status_byte, note_number, velocity);
                                             &tx.send((status_byte.clone(), note_number.clone(), velocity.clone())).unwrap();
-                                        }
+                                        });
                                         Ok(())
                                     })
                                 })),
