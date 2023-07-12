@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::future::Future;
+use std::io::Read;
 use std::pin::Pin;
 use bluer::{
     adv::Advertisement,
@@ -15,6 +16,7 @@ use bluer::{
 use std::time::Duration;
 use std::sync::Arc;
 use bluer::adv::AdvertisementHandle;
+use bluer::agent::{Agent, AgentHandle};
 use bluer::gatt::local::ApplicationHandle;
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
@@ -35,16 +37,18 @@ pub struct MidiBle {
     midi_session: bluer::Session,
     app_handle: Option<ApplicationHandle>,
     advertisement_handle: Option<AdvertisementHandle>,
+    agent_handle: Option<AgentHandle>,
     pub tx: tokio::sync::broadcast::Sender<MIDIEvent>,
 }
 
 impl MidiBle {
     pub async fn new() -> MidiBle {
-        let (tx, _rx) = tokio::sync::broadcast::channel::<MIDIEvent>(50);
+        let (tx, _rx) = tokio::sync::broadcast::channel::<MIDIEvent>(120);
         MidiBle {
             midi_session: bluer::Session::new().await.unwrap(),
             app_handle: None,
             advertisement_handle: None,
+            agent_handle: None,
             tx,
         }
     }
@@ -56,10 +60,25 @@ impl MidiBle {
 
     /// TODO: THIS DOESN'T AWAIT PAIRING, REFACTOR OR RENAME
     async fn await_pair(&mut self) -> bluer::Result<()> {
+        self.agent_handle = Some(
+            self.midi_session.register_agent(Agent {
+                request_default: true,
+                request_pin_code: None,
+                display_pin_code: None,
+                request_passkey: None,
+                display_passkey: None,
+                request_confirmation: None,
+                request_authorization: None,
+                authorize_service: None,
+                ..Default::default()
+            }).await?
+        );
+
         let adapter = self.midi_session.default_adapter().await?;
         adapter.set_powered(true).await?;
         adapter.set_pairable(true).await?;
         adapter.set_discoverable(true).await?;
+
 
         println!("Advertising on Bluetooth adapter {} with address {}\n", adapter.name(), adapter.address().await?);
         let le_advertisement = Advertisement {
@@ -97,6 +116,9 @@ impl MidiBle {
         let value_notify = value.clone();
         let tx_clone = self.tx.clone();
 
+        let mut session = self.midi_session.clone();
+        let mut adapter = session.default_adapter().await.unwrap().clone();
+
         Application {
             services: vec![
                 Service {
@@ -111,10 +133,21 @@ impl MidiBle {
                                 read: true,
                                 fun: Box::new(move |req| {
                                     let value = value_read.clone();
+                                    let adapter = adapter.clone();
                                     Box::pin(async move {
                                         let value = value.lock().await.clone();
+                                        let adapter = adapter.clone();
+                                        if vec![10, 1, 1, 10] == value { // .iter().enumerate().all(|(i, v)| ) {// matches!(value.as_slice(), [10, 1, 1, 10]) {
+                                            println!("Pairing request");
+                                            let device = adapter.device(req.device_address).unwrap();
+                                            device.pair().await.unwrap();
+                                            println!("Paired");
+                                            device.set_trusted(true).await.unwrap();
+                                            println!("Trusted");
+                                        }
                                         println!("Read request {:?} with value {:x?}", &req, &value);
-                                        Ok(value)
+                                        // Ok(value)
+                                        Ok([].to_vec())
                                     })
                                 }),
                                 ..Default::default()
@@ -123,6 +156,14 @@ impl MidiBle {
                                 write: true,
                                 write_without_response: true,
                                 method: CharacteristicWriteMethod::Fun(Box::new(move |new_value, req| {
+                                    if new_value[2] != 0x90 {
+                                        return Box::pin(async move {
+                                            Ok(())
+                                        })
+                                    }
+                                    println!("\n\n[{:?}]: New write request at", std::time::SystemTime::now());
+                                    println!("Write request {:?} with value {:x?}", &req, &new_value);
+
                                     let value = value_write.clone();
                                     let tx = tx_clone.clone();
 
@@ -130,8 +171,12 @@ impl MidiBle {
                                         println!("Write request {:?} with value {:x?}", &req, &new_value);
                                         let mut value = value.lock().await;
                                         *value = new_value;
-                                        if let [.., status_byte, note_number, velocity] = &value[..] {
-                                            println!("status_byte: {:x?}, note: {:x?}, velocity: {:x?}", status_byte, note_number, velocity);
+                                        let status_byte = value[2];
+                                        if let pair = value.drain(3..=4).as_slice().chunks(2).nth(0).unwrap() {
+                                            println!("Pair: {:?}", pair);
+                                            let note_number = pair[0];
+                                            let velocity = pair[1];
+                                            println!("[{:?}]: Sending message on tx: status_byte: {:x?}, note: {:x?}, velocity: {:x?}", std::time::SystemTime::now(), status_byte, note_number, velocity);
                                             &tx.send((status_byte.clone(), note_number.clone(), velocity.clone())).unwrap();
                                         }
                                         Ok(())
@@ -142,30 +187,31 @@ impl MidiBle {
                             notify: Some(CharacteristicNotify {
                                 notify: true,
                                 method: CharacteristicNotifyMethod::Fun(Box::new(move |mut notifier| {
-                                    let value = value_notify.clone();
+                                    // let value = value_notify.clone();
+                                    println!("Notification session start with confirming={:?}", notifier.confirming());
                                     Box::pin(async move {
-                                        tokio::spawn(async move {
-                                            println!(
-                                                "Notification session start with confirming={:?}",
-                                                notifier.confirming()
-                                            );
-                                            loop {
-                                                {
-                                                    let mut value = value.lock().await;
-                                                    println!("Notifying with value {:x?}", &*value);
-                                                    if let Err(err) = notifier.notify(value.to_vec()).await {
-                                                        println!("Notification error: {}", &err);
-                                                        break;
-                                                    }
-                                                    println!("Decrementing each element by one");
-                                                    for v in &mut *value {
-                                                        *v = v.saturating_sub(1);
-                                                    }
-                                                }
-                                                sleep(Duration::from_secs(5)).await;
-                                            }
-                                            println!("Notification session stop");
-                                        });
+                                        // tokio::spawn(async move {
+                                        //     println!(
+                                        //         "Notification session start with confirming={:?}",
+                                        //         notifier.confirming()
+                                        //     );
+                                        //     loop {
+                                        //         {
+                                        //             let mut value = value.lock().await;
+                                        //             println!("Notifying with value {:x?}", &*value);
+                                        //             if let Err(err) = notifier.notify(value.to_vec()).await {
+                                        //                 println!("Notification error: {}", &err);
+                                        //                 break;
+                                        //             }
+                                        //             println!("Decrementing each element by one");
+                                        //             for v in &mut *value {
+                                        //                 *v = v.saturating_sub(1);
+                                        //             }
+                                        //         }
+                                        //         sleep(Duration::from_secs(5)).await;
+                                        //     }
+                                        //     println!("Notification session stop");
+                                        // });
                                     })
                                 })),
                                 ..Default::default()

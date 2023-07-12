@@ -51,6 +51,7 @@ impl AutoDrum {
             tokio::select! {
                 _ = lines.next_line() => break,
                 read_res = rx.recv() => {
+                    println!("[{:?}] Received in thread id {:?}: {:?}", std::time::SystemTime::now(), thread::current().id(), read_res);
                     match read_res {
                         Ok(note) => {
                             println!("Received note: {:?}", note);
@@ -65,10 +66,13 @@ impl AutoDrum {
         }
     }
 
+
     pub async fn handle_note(&mut self, midi_data: (u8, u8, u8)) {
         let (status, note, velocity) = midi_data;
         if status == 0x90 {
+            println!("[{:?}]: accessing drum {:?}", std::time::SystemTime::now(), note);
             if let Some(drum) = self.drums.get_mut(&note) {
+                println!("[{:?}]: about to hit drum {:?}", std::time::SystemTime::now(), note);
                 drum.hit(velocity).await;
             }
         }

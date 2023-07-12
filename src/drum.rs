@@ -23,11 +23,13 @@ impl Drum {
     }
     pub async fn hit(&mut self, velocity: u8) {
         let duration = self.striker.get_duration(velocity);
-        println!("Hitting drum for {}ms", duration);
-        self.pin.set_high();
-        // tokio::time::sleep(Duration::from_nanos(duration as u64)).await;
-        sleep(Duration::from_millis(duration as u64));
-        println!("Done hitting drum");
+        if !self.pin.is_set_high() {
+            println!("[{:?}]: Hitting drum for {}ms", std::time::SystemTime::now(), duration);
+            self.pin.set_high();
+            tokio::time::sleep(Duration::from_nanos((duration * 1_000.0) as u64)).await;
+            // sleep(Duration::from_nanos(duration as u64 * 500_000));
+            println!("[{:?}]: Done hitting drum", std::time::SystemTime::now());
+        } else { println!("Drum already hit, ignoring") }
         self.pin.set_low();
     }
     pub fn abort(&mut self) {
