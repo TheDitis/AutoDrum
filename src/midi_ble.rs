@@ -137,16 +137,26 @@ impl MidiBle {
                                     Box::pin(async move {
                                         let value = value.lock().await.clone();
                                         let adapter = adapter.clone();
-                                        if vec![10, 1, 1, 10] == value { // .iter().enumerate().all(|(i, v)| ) {// matches!(value.as_slice(), [10, 1, 1, 10]) {
+
+                                        // If it's a pairing request, try to pair and trust
+                                        // TODO: Handle case where another device is already connected
+                                        if vec![16, 1, 1, 16] == value {
                                             println!("Pairing request");
                                             let device = adapter.device(req.device_address).unwrap();
-                                            device.pair().await.unwrap();
-                                            println!("Paired");
-                                            device.set_trusted(true).await.unwrap();
-                                            println!("Trusted");
+                                            if let Err(err) = device.pair().await {
+                                                println!("Did not pair: {:?}", err.message);
+                                            } else {
+                                                println!("Paired!");
+                                            }
+                                            if let Err(err) = device.set_trusted(true).await {
+                                                println!("Did not trust: {:?}", err.message);
+                                            } else {
+                                                println!("Trusted!");
+                                            }
+                                        } else {
+                                            println!("Not pairing request");
                                         }
                                         println!("Read request {:?} with value {:x?}", &req, &value);
-                                        // Ok(value)
                                         Ok([].to_vec())
                                     })
                                 }),
@@ -189,31 +199,9 @@ impl MidiBle {
                             notify: Some(CharacteristicNotify {
                                 notify: true,
                                 method: CharacteristicNotifyMethod::Fun(Box::new(move |mut notifier| {
-                                    // let value = value_notify.clone();
                                     println!("Notification session start with confirming={:?}", notifier.confirming());
                                     Box::pin(async move {
-                                        // tokio::spawn(async move {
-                                        //     println!(
-                                        //         "Notification session start with confirming={:?}",
-                                        //         notifier.confirming()
-                                        //     );
-                                        //     loop {
-                                        //         {
-                                        //             let mut value = value.lock().await;
-                                        //             println!("Notifying with value {:x?}", &*value);
-                                        //             if let Err(err) = notifier.notify(value.to_vec()).await {
-                                        //                 println!("Notification error: {}", &err);
-                                        //                 break;
-                                        //             }
-                                        //             println!("Decrementing each element by one");
-                                        //             for v in &mut *value {
-                                        //                 *v = v.saturating_sub(1);
-                                        //             }
-                                        //         }
-                                        //         sleep(Duration::from_secs(5)).await;
-                                        //     }
-                                        //     println!("Notification session stop");
-                                        // });
+                                        println!("Notification guy run")
                                     })
                                 })),
                                 ..Default::default()
