@@ -1,0 +1,22 @@
+### Replace the existing bluetooth.service file with these contents. It's located here: /lib/systemd/system/bluetooth.service
+### All that's necessary is to add the `-P *` flag when starting bluetoothd. This prevents it from loading any plugins, as sometimes these plugins request information with elevated privilege requirements and greatly complicate pairing to the midi service alone
+[Unit]
+Description=Bluetooth service
+Documentation=man:bluetoothd(8)
+ConditionPathIsDirectory=/sys/class/bluetooth
+
+[Service]
+Type=dbus
+BusName=org.bluez
+ExecStart=/usr/libexec/bluetooth/bluetoothd -P *
+NotifyAccess=main
+#WatchdogSec=10
+#Restart=on-failure
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+LimitNPROC=1
+ProtectHome=true
+ProtectSystem=full
+
+[Install]
+WantedBy=bluetooth.target
+Alias=dbus-org.bluez.service
