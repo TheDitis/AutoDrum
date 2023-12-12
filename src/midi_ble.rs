@@ -58,6 +58,10 @@ impl MidiBle {
         Ok(())
     }
 
+    fn is_status_byte(byte: u8) -> bool {
+        byte & 0b1000_0000 != 0
+    }
+
     /// TODO: THIS DOESN'T AWAIT PAIRING, REFACTOR OR RENAME
     async fn await_pair(&mut self) -> bluer::Result<()> {
         self.agent_handle = Some(
@@ -86,6 +90,8 @@ impl MidiBle {
             service_uuids: vec!["03B80E5A-EDE8-4B33-A751-6CE34EC4C700".parse().unwrap()].into_iter().collect(),
             discoverable: Some(true),
             local_name: Some("AutoDrum".to_string()),
+            min_interval: Some(Duration::from_millis(15)),
+            max_interval: Some(Duration::from_millis(15)),
             ..Default::default()
         };
         println!("Advertisement: {:?}\n\n", &le_advertisement);
@@ -166,11 +172,7 @@ impl MidiBle {
                                 write: true,
                                 write_without_response: true,
                                 method: CharacteristicWriteMethod::Fun(Box::new(move |new_value, req| {
-                                    if new_value[2] != 0x90 {
-                                        return Box::pin(async move {
-                                            Ok(())
-                                        })
-                                    }
+
                                     println!("\n\n[{:?}]: New write request at", std::time::SystemTime::now());
                                     println!("Write request {:?} with value {:x?}", &req, &new_value);
 
@@ -178,19 +180,33 @@ impl MidiBle {
                                     let tx = tx_clone.clone();
 
                                     Box::pin(async move {
-                                        println!("Write request {:?} with value {:x?}", &req, &new_value);
-                                        let mut value = value.lock().await;
-                                        *value = new_value;
-                                        let status_byte = value[2];
+                                        let mut last_status: u8 = 0x00;
+                                        let mut midi_data: Vec<u8> = vec![];
 
-                                        // Excluding the timestamp bytes and status byte, iterate over pairs of note number and velocity
-                                        value[3..].chunks(2).for_each(|pair| {
-                                            println!("Pair: {:?}", pair);
-                                            let note_number = pair[0];
-                                            let velocity = pair[1];
-                                            println!("[{:?}]: Sending message on tx: status_byte: {:x?}, note: {:x?}, velocity: {:x?}", std::time::SystemTime::now(), status_byte, note_number, velocity);
-                                            &tx.send((status_byte.clone(), note_number.clone(), velocity.clone())).unwrap();
-                                        });
+                                        // iterate bytes (adding first status byte to end as they trigger send of previous data)
+                                        for byte in new_value.iter().chain([new_value.first().unwrap()]) {
+                                            // if the byte is a status or timestamp byte (non-data):
+                                            if MidiBle::is_status_byte(*byte) {
+                                                // if we just finished a note-on message group, send them over tx
+                                                if midi_data.len() > 0 {
+                                                    if last_status == 0x90 {
+
+                                                        midi_data.chunks(2).for_each(|pair| {
+                                                            println!("Pair: {:?}", pair);
+                                                            let note_number = pair[0];
+                                                            let velocity = pair[1];
+                                                            println!("[{:?}]: Sending message on tx: status_byte: {:x?}, note: {:x?}, velocity: {:x?}", std::time::SystemTime::now(), last_status, note_number, velocity);
+                                                            &tx.send((last_status.clone(), note_number.clone(), velocity.clone())).unwrap();
+                                                        });
+                                                    }
+                                                    midi_data.clear();
+                                                }
+                                                last_status = *byte;
+                                            } else {
+                                                // TODO: HERE, split data into pairs and send each pair over tx
+                                                midi_data.push(*byte);
+                                            }
+                                        }
                                         Ok(())
                                     })
                                 })),
