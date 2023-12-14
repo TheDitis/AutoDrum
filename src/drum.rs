@@ -8,15 +8,17 @@ use crate::striker::Striker;
 const MAX_HIT_DURATION_MS: f64 = 400.0;
 
 pub struct Drum {
+    name: String,
     note: u8,
     pin: OutputPin,
     striker: Striker,
 }
 
 impl Drum {
-    pub fn new(note_num: u8, pin_num: u8, striker: Striker) -> Self {
+    pub fn new(note_num: u8, pin_num: u8, name: &str, striker: Striker) -> Self {
         let output_pin = Gpio::new().unwrap().get(pin_num).unwrap().into_output();
         Self {
+            name: name.to_string(),
             note: note_num,
             pin: output_pin,
             striker,
@@ -51,6 +53,10 @@ impl Drum {
         }
         let micros_duration = Duration::from_micros((duration * 1000.0) as u64);
         micros_duration
+    }
+
+    pub fn get_name(&self) -> String {
+        self.name.clone()
     }
 
     pub fn get_note_num(&self) -> u8 {

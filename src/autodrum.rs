@@ -18,6 +18,7 @@ struct HitLogEntry {
     pub actual_hit_duration: Duration,
     pub striker_kind: Striker,
     pub midi_data: (u8, u8, u8),
+    pub drum_name: String,
     pub target_pin: u8,
 }
 
@@ -45,8 +46,8 @@ impl AutoDrum {
         }
     }
 
-    pub fn add_drum(&mut self, note: u8, pin_num: u8, striker_kind: Striker) {
-        self.drums.insert(note, Drum::new(note, pin_num, striker_kind));
+    pub fn add_drum(&mut self, note: u8, pin_num: u8, name: &str, striker_kind: Striker) {
+        self.drums.insert(note, Drum::new(note, pin_num, name, striker_kind));
     }
 
     pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
@@ -88,10 +89,11 @@ impl AutoDrum {
         let (status, note, velocity) = midi_data;
         if status == 0x90 {
             if let Some(drum) = self.drums.get_mut(&note) {
+                // Hit the drum, timing it to compare against planned duration in debug logging
                 let start = std::time::Instant::now();
                 drum.hit(velocity).await?;
                 let end = std::time::Instant::now();
-                /// DEBUG LOGGING
+                // DEBUG LOGGING
                 &self.hit_log.push(HitLogEntry {
                     time: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as usize,
                     time_since_last: if self.hit_log.len() > 0 {
@@ -101,6 +103,7 @@ impl AutoDrum {
                     actual_hit_duration: end.duration_since(start),
                     striker_kind: drum.get_striker_kind(),
                     midi_data,
+                    drum_name: drum.get_name(),
                     target_pin: drum.get_pin_num(),
                 });
             }

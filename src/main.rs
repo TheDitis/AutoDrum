@@ -7,10 +7,11 @@ use auto_drum::striker::Striker;
 async fn main() -> Result<(), Box<dyn Error>> {
     let mut app = AutoDrum::new().await;
 
-    app.add_drum(84, 4, Striker::SolenoidBig);
-    app.add_drum(86, 5, Striker::SolenoidSmall);
-    app.add_drum(88, 6, Striker::SolenoidSmall);
-    app.add_drum(90, 7, Striker::SolenoidBig);
+    // Note number reference here: https://computermusicresource.com/midikeys.html
+    // app.add_drum(84, 4, "BROKEN MOSFET CHANNEL" Striker::SolenoidBig); // C5
+    app.add_drum(36, 7, "Kick", Striker::SolenoidBig); // C1
+    app.add_drum(37, 6, "Snare", Striker::SolenoidSmall); // C#1
+    app.add_drum(38, 5, "HiHat", Striker::SolenoidSmall); // D1
 
     app.run().await;
     app.stop();
