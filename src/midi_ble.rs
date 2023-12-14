@@ -90,8 +90,8 @@ impl MidiBle {
             service_uuids: vec!["03B80E5A-EDE8-4B33-A751-6CE34EC4C700".parse().unwrap()].into_iter().collect(),
             discoverable: Some(true),
             local_name: Some("AutoDrum".to_string()),
-            min_interval: Some(Duration::from_millis(15)),
-            max_interval: Some(Duration::from_millis(15)),
+            min_interval: Some(Duration::from_millis(5)),
+            max_interval: Some(Duration::from_millis(5)),
             ..Default::default()
         };
         println!("Advertisement: {:?}\n\n", &le_advertisement);
@@ -172,10 +172,6 @@ impl MidiBle {
                                 write: true,
                                 write_without_response: true,
                                 method: CharacteristicWriteMethod::Fun(Box::new(move |new_value, req| {
-
-                                    println!("\n\n[{:?}]: New write request at", std::time::SystemTime::now());
-                                    println!("Write request {:?} with value {:x?}", &req, &new_value);
-
                                     let value = value_write.clone();
                                     let tx = tx_clone.clone();
 
@@ -192,10 +188,8 @@ impl MidiBle {
                                                     if last_status == 0x90 {
 
                                                         midi_data.chunks(2).for_each(|pair| {
-                                                            println!("Pair: {:?}", pair);
                                                             let note_number = pair[0];
                                                             let velocity = pair[1];
-                                                            println!("[{:?}]: Sending message on tx: status_byte: {:x?}, note: {:x?}, velocity: {:x?}", std::time::SystemTime::now(), last_status, note_number, velocity);
                                                             &tx.send((last_status.clone(), note_number.clone(), velocity.clone())).unwrap();
                                                         });
                                                     }
