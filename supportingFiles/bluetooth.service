@@ -1,5 +1,6 @@
 ### Replace the existing bluetooth.service file with these contents. It's located here: /lib/systemd/system/bluetooth.service
 ### All that's necessary is to add the `-P *` flag when starting bluetoothd. This prevents it from loading any plugins, as sometimes these plugins request information with elevated privilege requirements and greatly complicate pairing to the midi service alone
+### After replacing the file, run `sudo systemctl daemon-reload` and `sudo systemctl restart bluetooth.service` to restart the service with the new configuration
 [Unit]
 Description=Bluetooth service
 Documentation=man:bluetoothd(8)
