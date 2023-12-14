@@ -13,7 +13,6 @@ pub struct Drum {
     striker: Striker,
 }
 
-
 impl Drum {
     pub fn new(note_num: u8, pin_num: u8, striker: Striker) -> Self {
         let output_pin = Gpio::new().unwrap().get(pin_num).unwrap().into_output();

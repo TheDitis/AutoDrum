@@ -60,7 +60,7 @@ impl AutoDrum {
         loop {
             tokio::select! {
                 _ = lines.next_line() => {
-                    // save hit log to new file:
+                    // save any hits made to new log file:
                     if (self.hit_log.len() > 0) {
                         let mut file = File::create(format!("./logs/hit_log_{:?}.json", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap())).await?;
                         file.write_all(serde_json::to_string(&self.hit_log).unwrap().as_bytes()).await?;
