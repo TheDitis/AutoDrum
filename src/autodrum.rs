@@ -1,6 +1,7 @@
 use std::collections::HashMap;
+use std::env;
 use std::error::Error;
-use std::time::Duration;
+use std::time::{Duration, Instant, UNIX_EPOCH};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::fs::File;
 use serde::{Serialize, Deserialize};
@@ -18,6 +19,8 @@ struct HitLogEntry {
     pub actual_hit_duration: Duration,
     pub striker_kind: Striker,
     pub midi_data: (u8, u8, u8),
+    pub note_num: u8,
+    pub velocity: u8,
     pub drum_name: String,
     pub target_pin: u8,
 }
@@ -33,16 +36,24 @@ pub struct AutoDrum {
     midi_ble_manager: MidiBle,
     drums: HashMap<u8, Drum>,
     hit_log: Vec<HitLogEntry>,
+    debug: bool,
 }
 
 impl AutoDrum {
     pub async fn new() -> Self {
         let mut midi_ble_manager = MidiBle::new().await;
         let mut drums = HashMap::new();
+
+        let debug = env::args().any(|arg| arg == "--debug");
+        if (debug) {
+            println!("----------- RUNNING IN DEBUG MODE -----------");
+        }
+
         AutoDrum {
             midi_ble_manager,
             drums,
             hit_log: vec![],
+            debug,
         }
     }
 
@@ -88,25 +99,42 @@ impl AutoDrum {
     pub async fn handle_note(&mut self, midi_data: (u8, u8, u8)) -> Result<(), Box<dyn Error>> {
         let (status, note, velocity) = midi_data;
         if status == 0x90 {
-            if let Some(drum) = self.drums.get_mut(&note) {
-                // Hit the drum, timing it to compare against planned duration in debug logging
-                let start = std::time::Instant::now();
-                drum.hit(velocity).await?;
-                let end = std::time::Instant::now();
-                // DEBUG LOGGING
-                &self.hit_log.push(HitLogEntry {
-                    time: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as usize,
-                    time_since_last: if self.hit_log.len() > 0 {
-                        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as usize - self.hit_log.last().unwrap().time
-                    } else { 0 },
-                    planned_hit_duration: drum.get_strike_duration(velocity),
-                    actual_hit_duration: end.duration_since(start),
-                    striker_kind: drum.get_striker_kind(),
-                    midi_data,
-                    drum_name: drum.get_name(),
-                    target_pin: drum.get_pin_num(),
-                });
+            if !self.debug {
+                self.hit(note, velocity).await?;
             }
+            else {
+                self.hit_with_debug(note, velocity, midi_data).await?;
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn hit(&mut self, note: u8, velocity: u8) -> Result<(), Box<dyn Error>> {
+        if let Some(drum) = self.drums.get_mut(&note) {
+            drum.hit(velocity).await?;
+        }
+        Ok(())
+    }
+
+    pub async fn hit_with_debug(&mut self, note: u8, velocity: u8, midi_data: (u8, u8, u8)) -> Result<(), Box<dyn Error>> {
+        if let Some(drum) = self.drums.get_mut(&note) {
+            let start = Instant::now();
+            drum.hit(velocity).await?;
+            let end = Instant::now();
+            &self.hit_log.push(HitLogEntry {
+                time: std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as usize,
+                time_since_last: if self.hit_log.len() > 0 {
+                    std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as usize - self.hit_log.last().unwrap().time
+                } else { 0 },
+                planned_hit_duration: drum.get_strike_duration(velocity),
+                actual_hit_duration: end.duration_since(start),
+                striker_kind: drum.get_striker_kind(),
+                midi_data,
+                note_num: note,
+                velocity,
+                drum_name: drum.get_name(),
+                target_pin: drum.get_pin_num(),
+            });
         }
         Ok(())
     }
