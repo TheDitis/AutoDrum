@@ -1,8 +1,10 @@
-use rppal::gpio::Gpio;
 use std::time::Duration;
-use rppal::gpio::OutputPin;
 use std::time::Instant;
+
+use rppal::gpio::Gpio;
+use rppal::gpio::OutputPin;
 use tokio_timerfd::Delay;
+
 use crate::striker::Striker;
 
 const MAX_HIT_DURATION_MS: f64 = 400.0;
@@ -33,7 +35,7 @@ impl Drum {
             self.pin.set_high();
 
             // Wait for the duration of the hit, then turn off the striker
-            let mut delay = Delay::new(Instant::now() + duration)?;
+            let delay = Delay::new(Instant::now() + duration)?;
             delay.await?;
             self.pin.set_low();
         } else { println!("Drum already hit, ignoring") }
@@ -51,8 +53,7 @@ impl Drum {
             duration = MAX_HIT_DURATION_MS;
             println!("Clamped hit duration to {}", duration)
         }
-        let micros_duration = Duration::from_micros((duration * 1000.0) as u64);
-        micros_duration
+        Duration::from_micros((duration * 1000.0) as u64)
     }
 
     pub fn get_name(&self) -> String {

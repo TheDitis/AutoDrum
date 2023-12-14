@@ -13,7 +13,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     app.add_drum(37, 6, "Snare", Striker::SolenoidSmall); // C#1
     app.add_drum(38, 5, "HiHat", Striker::SolenoidSmall); // D1
 
-    app.run().await;
+    app.run().await?;
     app.stop();
 
     Ok(())

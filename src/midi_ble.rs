@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use std::time::Duration;
+
 use bluer::{
     adv::Advertisement,
     gatt::{
@@ -13,8 +13,6 @@ use bluer::{
 use bluer::adv::AdvertisementHandle;
 use bluer::agent::{Agent, AgentHandle};
 use bluer::gatt::local::ApplicationHandle;
-use futures::StreamExt;
-use tokio::sync::Mutex;
 use uuid::{Uuid, uuid};
 
 // Specified by MIDI BLE spec, these are the UUIDs for the MIDI service and characteristic and should never change
@@ -107,9 +105,10 @@ impl MidiBle {
     ///     handled by the AutoDrum application.
     /// - Notify: Empty. Characteristic is required but not used.
     async fn midi_application(&self) -> Application {
-        let value = Arc::new(Mutex::new(vec![0x10, 0x01, 0x01, 0x10]));
-        // let value_read = value.clone();  // Will likely need this later if output is implemented
-        let value_write = value.clone();
+        // Will likely need these later:
+        // let value = Arc::new(Mutex::new(vec![0x10, 0x01, 0x01, 0x10]));
+        // let value_read = value.clone();
+        // let value_write = value.clone();
         let tx_clone = self.tx.clone();
 
         Application {
@@ -124,7 +123,7 @@ impl MidiBle {
                             authorize: true,
                             read: Some(CharacteristicRead {
                                 read: true,
-                                fun: Box::new(move |req| {
+                                fun: Box::new(move | _req | {
                                     Box::pin(async move {
                                         Ok([].to_vec())
                                     })
@@ -134,8 +133,8 @@ impl MidiBle {
                             write: Some(CharacteristicWrite {
                                 write: true,
                                 write_without_response: true,
-                                method: CharacteristicWriteMethod::Fun(Box::new(move |new_value, req| {
-                                    let value = value_write.clone();
+                                method: CharacteristicWriteMethod::Fun(Box::new(move |new_value, _req| {
+                                    // let value = value_write.clone(); // Will likely need this later
                                     let tx = tx_clone.clone();
 
                                     Box::pin(async move {
@@ -147,13 +146,13 @@ impl MidiBle {
                                             // if the byte is a status or timestamp byte (non-data):
                                             if MidiBle::is_status_byte(*byte) {
                                                 // if we just finished a note-on message group, send them over tx
-                                                if midi_data.len() > 0 {
+                                                if !midi_data.is_empty() {
                                                     if last_status == 0x90 {
                                                         // split midi data into chunks of 2 bytes (note number and velocity) and send over tx (to be handled by AutoDrum)
                                                         midi_data.chunks(2).for_each(|pair| {
                                                             let note_number = pair[0];
                                                             let velocity = pair[1];
-                                                            &tx.send((last_status.clone(), note_number.clone(), velocity.clone())).unwrap();
+                                                            tx.send((last_status, note_number, velocity)).unwrap();
                                                         });
                                                     }
                                                     midi_data.clear();
@@ -170,7 +169,7 @@ impl MidiBle {
                             }),
                             notify: Some(CharacteristicNotify {
                                 notify: true,
-                                method: CharacteristicNotifyMethod::Fun(Box::new(move |mut notifier| {
+                                method: CharacteristicNotifyMethod::Fun(Box::new(move | _notifier | {
                                     Box::pin(async move {})
                                 })),
                                 ..Default::default()

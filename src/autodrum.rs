@@ -2,14 +2,14 @@ use std::collections::HashMap;
 use std::env;
 use std::error::Error;
 use std::time::{Duration, Instant, UNIX_EPOCH};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+use serde::{Deserialize, Serialize};
 use tokio::fs::File;
-use serde::{Serialize, Deserialize};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
-use crate::midi_ble::MidiBle;
 use crate::drum::Drum;
+use crate::midi_ble::MidiBle;
 use crate::striker::Striker;
-
 
 #[derive(Debug, Serialize, Deserialize)]
 struct HitLogEntry {
@@ -25,12 +25,6 @@ struct HitLogEntry {
     pub target_pin: u8,
 }
 
-const BASE_HIT_DURATION_SMALL: f32 = 0.0002;
-const BASE_HIT_DURATION_BIG: f32 = 0.005;
-
-
-// Gpio uses BCM pin numbering. BCM GPIO 23 is tied to physical pin 16.
-const GPIO_LED: u8 = 4;
 
 pub struct AutoDrum {
     midi_ble_manager: MidiBle,
@@ -41,11 +35,11 @@ pub struct AutoDrum {
 
 impl AutoDrum {
     pub async fn new() -> Self {
-        let mut midi_ble_manager = MidiBle::new().await;
-        let mut drums = HashMap::new();
+        let midi_ble_manager = MidiBle::new().await;
+        let drums = HashMap::new();
 
         let debug = env::args().any(|arg| arg == "--debug");
-        if (debug) {
+        if debug {
             println!("----------- RUNNING IN DEBUG MODE -----------");
         }
 
@@ -73,7 +67,7 @@ impl AutoDrum {
             tokio::select! {
                 _ = lines.next_line() => {
                     // save any hits made to new log file:
-                    if (self.hit_log.len() > 0) {
+                    if !self.hit_log.is_empty() {
                         let mut file = File::create(format!("./logs/hit_log_{:?}.json", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap())).await?;
                         file.write_all(serde_json::to_string(&self.hit_log).unwrap().as_bytes()).await?;
                         println!("Hit log saved to file");
@@ -83,10 +77,10 @@ impl AutoDrum {
                 read_res = rx.recv() => {
                     match read_res {
                         Ok(note) => {
-                            self.handle_note(note).await;
+                            self.handle_note(note).await?
                         },
                         Err(e) => {
-                            println!("Error: {:?}", e);
+                            println!("Error: {:?}", e)
                         }
                     }
                 }
@@ -121,9 +115,9 @@ impl AutoDrum {
             let start = Instant::now();
             drum.hit(velocity).await?;
             let end = Instant::now();
-            &self.hit_log.push(HitLogEntry {
+            self.hit_log.push(HitLogEntry {
                 time: std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as usize,
-                time_since_last: if self.hit_log.len() > 0 {
+                time_since_last: if !self.hit_log.is_empty() {
                     std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as usize - self.hit_log.last().unwrap().time
                 } else { 0 },
                 planned_hit_duration: drum.get_strike_duration(velocity),
@@ -143,6 +137,8 @@ impl AutoDrum {
         self.drums.iter_mut().for_each(|(_, drum)| drum.abort());
     }
 }
+
+/// Ensure no pins are left in the "on" state when the program exits
 impl Drop for AutoDrum {
     fn drop(&mut self) {
         self.stop();
