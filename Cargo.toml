@@ -11,3 +11,7 @@ bluer = { version = "0.16.1", features = ["full"] }
 tokio = { version = "1.28.1", features = ["full"] }
 uuid = "1.3.1"
 futures = "0.3.28"
+serde_json = "1.0.108"
+serde = { version = "1.0.193", features = ["derive"] }
+tokio-timerfd = "0.2.0"
+

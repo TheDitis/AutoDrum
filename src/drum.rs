@@ -1,9 +1,11 @@
-use std::thread::sleep;
 use rppal::gpio::Gpio;
 use std::time::Duration;
 use rppal::gpio::OutputPin;
+use std::time::Instant;
+use tokio_timerfd::Delay;
 use crate::striker::Striker;
 
+const MAX_HIT_DURATION_MS: f64 = 400.0;
 
 pub struct Drum {
     note: u8,
@@ -21,16 +23,30 @@ impl Drum {
             striker,
         }
     }
-    pub async fn hit(&mut self, velocity: u8) {
-        let duration = self.striker.get_duration(velocity);
+    pub async fn hit(&mut self, velocity: u8) -> Result<(), std::io::Error> {
+        let mut start: tokio::time::Instant;
         if !self.pin.is_set_high() {
-            println!("[{:?}]: Hitting drum for {}ms", std::time::SystemTime::now(), duration);
+            // Get the duration of the hit, clamping if necessary
+            let mut duration = self.striker.get_duration(velocity);
+            println!("Planned hit duration: {}ms", duration);
+            if duration > MAX_HIT_DURATION_MS {
+                duration = MAX_HIT_DURATION_MS;
+                println!("Clamped hit duration to {}", duration)
+            }
+            let micros_duration = Duration::from_micros((duration * 1000.0) as u64);
+            println!("Micros duration: {:?}", micros_duration);
+
+            // Trigger the striker
             self.pin.set_high();
-            tokio::time::sleep(Duration::from_nanos((duration * 1_000.0) as u64)).await;
-            // sleep(Duration::from_nanos(duration as u64 * 500_000));
-            println!("[{:?}]: Done hitting drum", std::time::SystemTime::now());
+
+            // Wait for the duration of the hit, then turn off the striker
+            let mut delay = Delay::new(Instant::now() + micros_duration)?;
+            delay.await?;
+            self.pin.set_low();
+
+            println!("Actual hit duration: {:?}", start.elapsed());
         } else { println!("Drum already hit, ignoring") }
-        self.pin.set_low();
+        Ok(())
     }
     pub fn abort(&mut self) {
         self.pin.set_low();
