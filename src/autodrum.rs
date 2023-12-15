@@ -1,36 +1,20 @@
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
-use std::time::{Duration, Instant, UNIX_EPOCH};
+use std::time::{Instant, UNIX_EPOCH};
 
-use serde::{Deserialize, Serialize};
-use tokio::fs::File;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, BufReader};
 
 use crate::drum::Drum;
+use crate::logger::{HitLogEntry, LogEntry, Logger};
 use crate::midi_ble::MidiBle;
 use crate::striker::Striker;
-
-#[derive(Debug, Serialize, Deserialize)]
-struct HitLogEntry {
-    pub time: usize,
-    pub time_since_last: usize,
-    pub planned_hit_duration: Duration,
-    pub actual_hit_duration: Duration,
-    pub striker_kind: Striker,
-    pub midi_data: (u8, u8, u8),
-    pub note_num: u8,
-    pub velocity: u8,
-    pub drum_name: String,
-    pub target_pin: u8,
-}
-
 
 pub struct AutoDrum {
     midi_ble_manager: MidiBle,
     drums: HashMap<u8, Drum>,
-    hit_log: Vec<HitLogEntry>,
     debug: bool,
+    logger: Logger,
 }
 
 impl AutoDrum {
@@ -46,8 +30,8 @@ impl AutoDrum {
         AutoDrum {
             midi_ble_manager,
             drums,
-            hit_log: vec![],
             debug,
+            logger: Logger::new(),
         }
     }
 
@@ -66,11 +50,8 @@ impl AutoDrum {
         loop {
             tokio::select! {
                 _ = lines.next_line() => {
-                    // save any hits made to new log file:
-                    if !self.hit_log.is_empty() {
-                        let mut file = File::create(format!("./logs/hit_log_{:?}.json", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap())).await?;
-                        file.write_all(serde_json::to_string(&self.hit_log).unwrap().as_bytes()).await?;
-                        println!("Hit log saved to file");
+                    if self.debug {
+                        self.logger.save().await?;
                     }
                     break;
                 },
@@ -112,23 +93,26 @@ impl AutoDrum {
 
     pub async fn hit_with_debug(&mut self, note: u8, velocity: u8, midi_data: (u8, u8, u8)) -> Result<(), Box<dyn Error>> {
         if let Some(drum) = self.drums.get_mut(&note) {
+            let time = std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
             let start = Instant::now();
             drum.hit(velocity).await?;
-            let end = Instant::now();
-            self.hit_log.push(HitLogEntry {
-                time: std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as usize,
-                time_since_last: if !self.hit_log.is_empty() {
-                    std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as usize - self.hit_log.last().unwrap().time
+            let actual_duration_ns = start.elapsed().as_nanos() as u64;
+            // Collect data about the hit and give it to the logger
+            let hit_data = HitLogEntry {
+                time,
+                ms_since_last: if let Some(last_hit_time) = self.logger.last_hit_time() {
+                    time - last_hit_time
                 } else { 0 },
-                planned_hit_duration: drum.get_strike_duration(velocity),
-                actual_hit_duration: end.duration_since(start),
+                planned_duration_ns: drum.get_strike_duration(velocity).as_nanos() as u64,
+                actual_duration_ns,
                 striker_kind: drum.get_striker_kind(),
                 midi_data,
                 note_num: note,
                 velocity,
                 drum_name: drum.get_name(),
                 target_pin: drum.get_pin_num(),
-            });
+            };
+            self.logger.log(LogEntry::Hit(hit_data));
         }
         Ok(())
     }
