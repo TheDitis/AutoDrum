@@ -23,10 +23,15 @@ type MIDIEvent = (u8, u8, u8);
 
 /// Handles the sending and receiving of MIDI data over BLE, forwarding relevant MIDI events to AutoDrum
 pub struct MidiBle {
+    /// The BLE session object from bluer (BlueZ wrapper)
     ble_session: bluer::Session,
-    app_handle: Option<ApplicationHandle>,
-    advertisement_handle: Option<AdvertisementHandle>,
+    /// The handle to the BlueZ agent that handles pairing and authorization
     agent_handle: Option<AgentHandle>,
+    /// The handle to the BLE advertisement that advertises the MIDI service
+    advertisement_handle: Option<AdvertisementHandle>,
+    /// The handle to the GATT application that serves the MIDI service
+    app_handle: Option<ApplicationHandle>,
+    /// The tokio channel to send MIDI events to the main AutoDrum application
     pub tx: tokio::sync::broadcast::Sender<MIDIEvent>,
 }
 
@@ -35,9 +40,9 @@ impl MidiBle {
         let (tx, _rx) = tokio::sync::broadcast::channel::<MIDIEvent>(120);
         MidiBle {
             ble_session: bluer::Session::new().await.unwrap(),
-            app_handle: None,
-            advertisement_handle: None,
             agent_handle: None,
+            advertisement_handle: None,
+            app_handle: None,
             tx,
         }
     }
@@ -92,6 +97,7 @@ impl MidiBle {
         Ok(())
     }
 
+    /// Check if a given byte is a status byte (note-on, note-off, aftertouch, etc.)
     fn is_status_byte(byte: u8) -> bool {
         byte & 0b1000_0000 != 0
     }
