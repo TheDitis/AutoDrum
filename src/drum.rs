@@ -9,14 +9,20 @@ use crate::striker::Striker;
 
 const MAX_HIT_DURATION_MS: f64 = 400.0;
 
+/// Represents a drum that can be hit
 pub struct Drum {
-    name: String,
-    note: u8,
+    /// Human-readable name of the drum (e.g. "Snare" or "Ride Bell)
+    pub name: String,
+    /// The MIDI note number that triggers this drum
+    pub note: u8,
+    /// The GPIO pin that controls the striker
     pin: OutputPin,
+    /// The type of striker used to hit this drum
     striker: Striker,
 }
 
 impl Drum {
+    /// Create a new drum
     pub fn new(note_num: u8, pin_num: u8, name: &str, striker: Striker) -> Self {
         let output_pin = Gpio::new().unwrap().get(pin_num).unwrap().into_output();
         Self {
@@ -27,6 +33,7 @@ impl Drum {
         }
     }
 
+    /// Hit the drum, triggering the striker for a given duration specified by the striker type and velocity
     pub async fn hit(&mut self, velocity: u8) -> Result<(), std::io::Error> {
         if !self.pin.is_set_high() {
             let duration = self.get_strike_duration(velocity);
@@ -42,10 +49,7 @@ impl Drum {
         Ok(())
     }
 
-    pub fn abort(&mut self) {
-        self.pin.set_low();
-    }
-
+    /// Get the duration of the hit based on striker type and velocity, clamping if necessary
     pub fn get_strike_duration(&self, velocity: u8) -> Duration {
         // Get the duration of the hit, clamping if necessary
         let mut duration = self.striker.get_duration(velocity);
@@ -56,23 +60,33 @@ impl Drum {
         Duration::from_micros((duration * 1000.0) as u64)
     }
 
+    /// Get the name of the drum
     pub fn get_name(&self) -> String {
         self.name.clone()
     }
 
+    /// Get the MIDI note number of the drum
     pub fn get_note_num(&self) -> u8 {
         self.note
     }
 
+    /// Get the type of striker used to hit the drum
     pub fn get_striker_kind(&self) -> Striker {
         self.striker
     }
 
+    /// Get the raspberry pi GPIO pin number that controls the striker for this drum
     pub fn get_pin_num(&self) -> u8 {
         self.pin.pin()
     }
+
+    /// Abort the current hit, turning off the striker early
+    pub fn abort(&mut self) {
+        self.pin.set_low();
+    }
 }
 
+/// Automatically turn off the striker when the drum is dropped (e.g. there's a panic during a hit)
 impl Drop for Drum {
     fn drop(&mut self) {
         self.pin.set_low();
