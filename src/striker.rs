@@ -19,7 +19,7 @@ impl Striker {
     /// This is the shortest time it can be activated while still getting a sound
     fn min_hit_duration(&self) -> f64 {
         match self {
-            Striker::SolenoidBig => 10.0,
+            Striker::SolenoidBig => 15.0,
             Striker::SolenoidSmall => 0.2,
         }
     }
@@ -28,7 +28,7 @@ impl Striker {
     /// The maximum duration is min_hit_duration + (max_hit_duration_variation * (velocity / 127))
     fn max_hit_duration_variation(&self) -> f64 {
         match self {
-            Striker::SolenoidBig => 20.0,
+            Striker::SolenoidBig => 50.0,
             Striker::SolenoidSmall => 1.5,
         }
     }
