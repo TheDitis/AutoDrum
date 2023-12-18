@@ -151,9 +151,9 @@ impl MidiBle {
                                         for byte in new_value.iter().chain([new_value.first().unwrap()]) {
                                             // if the byte is a status or timestamp byte (non-data):
                                             if MidiBle::is_status_byte(*byte) {
-                                                // if we just finished a note-on message group, send them over tx
+                                                // if we just finished a note-on or note-off message group, send them over tx
                                                 if !midi_data.is_empty() {
-                                                    if last_status == 0x90 {
+                                                    if last_status == 0x90 || last_status == 0x80 {
                                                         // split midi data into chunks of 2 bytes (note number and velocity) and send over tx (to be handled by AutoDrum)
                                                         midi_data.chunks(2).for_each(|pair| {
                                                             let note_number = pair[0];
