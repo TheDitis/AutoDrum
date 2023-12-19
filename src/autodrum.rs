@@ -11,7 +11,7 @@ use crate::logger::{HitLogEntry, LogEntry, Logger};
 use crate::midi_ble::MidiBle;
 use crate::modifier::{Modifier, ModifierHardwareKind};
 use crate::remote_command::Command;
-use crate::striker::Striker;
+use crate::striker_hardware_util::StrikerHardwareKind;
 
 #[derive(Serialize, Deserialize)]
 struct Configuration {
@@ -94,7 +94,7 @@ impl AutoDrum {
         note: u8,
         pin_num: u8,
         name: &str,
-        striker_kind: Striker
+        striker_kind: StrikerHardwareKind,
     ) -> Result<(), Box<dyn Error>> {
         self.enforce_unique_note_num(note)?;
         self.enforce_unique_name(name)?;
@@ -315,6 +315,8 @@ impl AutoDrum {
                 note: *note,
                 pin: drum.get_pin_num(),
                 striker: drum.get_striker_kind(),
+                min_hit_duration: drum.get_min_hit_duration(),
+                max_hit_duration: drum.get_max_hit_duration(),
             });
         }
         Configuration {

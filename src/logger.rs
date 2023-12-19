@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
-use crate::striker::Striker;
+use crate::striker_hardware_util::StrikerHardwareKind;
 
 /// A log entry representing a drum hit
 #[derive(Debug, Serialize, Deserialize)]
@@ -15,7 +15,7 @@ pub struct HitLogEntry {
     /// nanosecond duration between when the striker was triggered and when it was turned off
     pub actual_duration_ns: u64,
     /// The type of striker used
-    pub striker_kind: Striker,
+    pub striker_kind: StrikerHardwareKind,
     /// The raw MIDI data that triggered the hit
     pub midi_data: (u8, u8, u8),
     /// The note number of the midi data
