@@ -15,6 +15,7 @@ use bluer::adv::AdvertisementHandle;
 use bluer::agent::{Agent, AgentHandle};
 use bluer::gatt::local::ApplicationHandle;
 use uuid::{Uuid, uuid};
+use crate::remote_command::Command;
 
 // Specified by MIDI BLE spec, these are the UUIDs for the MIDI service and characteristic and should never change
 const BLE_MIDI_SERVICE_ID: Uuid = uuid!("03B80E5A-EDE8-4B33-A751-6CE34EC4C700");
@@ -33,18 +34,23 @@ pub struct MidiBle {
     /// The handle to the GATT application that serves the MIDI service
     app_handle: Option<ApplicationHandle>,
     /// The tokio channel to send MIDI events to the main AutoDrum application
-    pub tx: tokio::sync::broadcast::Sender<MIDIEvent>,
+    pub tx: tokio::sync::broadcast::Sender<Command>,
+    /// The value of the MIDI characteristic
+    pub read_value: Arc<Mutex<Vec<u8>>>,
 }
 
 impl MidiBle {
     pub async fn new() -> MidiBle {
-        let (tx, _rx) = tokio::sync::broadcast::channel::<MIDIEvent>(120);
+        let ble_session = bluer::Session::new().await.unwrap();
+        let (tx, _rx) = tokio::sync::broadcast::channel::<Command>(120);
+        let read_value = Arc::new(Mutex::new(vec![0x00, 0x00, 0x00, 0x00]));
         MidiBle {
-            ble_session: bluer::Session::new().await.unwrap(),
+            ble_session,
             agent_handle: None,
             advertisement_handle: None,
             app_handle: None,
             tx,
+            read_value,
         }
     }
 
@@ -99,7 +105,7 @@ impl MidiBle {
     }
 
     /// Check if a given byte is a status byte (note-on, note-off, aftertouch, etc.)
-    fn is_status_byte(byte: u8) -> bool {
+    pub fn is_status_byte(byte: u8) -> bool {
         byte & 0b1000_0000 != 0
     }
 
@@ -112,10 +118,9 @@ impl MidiBle {
     ///     handled by the AutoDrum application.
     /// - Notify: Empty. Characteristic is required but not used.
     async fn midi_application(&self) -> Application {
-        // Will likely need these later:
-        let value = Arc::new(Mutex::new(vec![0x10, 0x01, 0x01, 0x10]));
-        let value_read = value.clone();
-        let value_write = value.clone();
+        let value_read = self.read_value.clone();
+        // Might need this again later:
+        // let value_write = self.read_value.clone();
         let tx_clone = self.tx.clone();
 
         Application {
@@ -142,42 +147,10 @@ impl MidiBle {
                                 write: true,
                                 write_without_response: true,
                                 method: CharacteristicWriteMethod::Fun(Box::new(move |new_value, _req| {
-                                    // let value = value_write.clone(); // Will likely need this later
                                     let tx = tx_clone.clone();
-                                    let response_value = value_write.clone();
-
                                     Box::pin(async move {
-                                        let mut last_status: u8 = 0x00;
-                                        let mut midi_data: Vec<u8> = vec![];
-
-                                        println!("Received MIDI data: {:?}", new_value);
-                                        if &new_value.first().unwrap().clone() == &0x00u8 {
-                                            response_value.lock().unwrap().clear();
-                                            let return_value = vec![0x10, 0x01, 0x01, 0x10];
-                                            response_value.lock().unwrap().extend(return_value);
-                                            return Ok(());
-                                        }
-
-                                        // iterate bytes (adding first status byte to end as they trigger send of previous data)
-                                        for byte in new_value.iter().chain([new_value.first().unwrap()]) {
-                                            // if the byte is a status or timestamp byte (non-data):
-                                            if MidiBle::is_status_byte(*byte) {
-                                                // if we just finished a note-on or note-off message group, send them over tx
-                                                if !midi_data.is_empty() {
-                                                    if last_status == 0x90 || last_status == 0x80 {
-                                                        // split midi data into chunks of 2 bytes (note number and velocity) and send over tx (to be handled by AutoDrum)
-                                                        midi_data.chunks(2).for_each(|pair| {
-                                                            let note_number = pair[0];
-                                                            let velocity = pair[1];
-                                                            tx.send((last_status, note_number, velocity)).unwrap();
-                                                        });
-                                                    }
-                                                    midi_data.clear();
-                                                }
-                                                last_status = *byte;
-                                            } else {
-                                                midi_data.push(*byte);
-                                            }
+                                        if let Ok(command) = Command::try_from(&new_value) {
+                                            tx.send(command.clone()).unwrap();
                                         }
                                         Ok(())
                                     })

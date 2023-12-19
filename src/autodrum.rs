@@ -3,13 +3,21 @@ use std::env;
 use std::error::Error;
 use std::time::{Instant, UNIX_EPOCH};
 
+use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncBufReadExt, BufReader};
 
-use crate::drum::Drum;
+use crate::drum::{Drum, DrumRaw};
 use crate::logger::{HitLogEntry, LogEntry, Logger};
 use crate::midi_ble::MidiBle;
 use crate::modifier::{Modifier, ModifierHardwareKind};
+use crate::remote_command::Command;
 use crate::striker::Striker;
+
+#[derive(Serialize, Deserialize)]
+struct Configuration {
+    drums: Vec<DrumRaw>,
+}
+
 
 pub struct AutoDrum {
     /// The BLE MIDI manager that brings us any relevant MIDI data sent to the BLE MIDI service
@@ -124,8 +132,8 @@ impl AutoDrum {
                 },
                 read_res = rx.recv() => {
                     match read_res {
-                        Ok(note) => {
-                            self.handle_note(note).await?
+                        Ok(command) => {
+                            self.route_command(&command).await?
                         },
                         Err(e) => {
                             println!("Error: {:?}", e)
@@ -137,6 +145,65 @@ impl AutoDrum {
         Ok(())
     }
 
+    pub async fn route_command(&mut self, command: &Command) -> Result<(), Box<dyn Error>> {
+        match command {
+            Command::MIDI(new_value) => self.handle_midi_command(new_value).await?,
+            Command::ReadConfiguration(new_value) => {
+                println!("Received read configuration command: {:?}", new_value);
+                let config = Configuration {
+                    drums: self.drums.iter().map(|(_, drum)| drum.export_raw()).collect(),
+                };
+                let stringified_config = serde_json::to_string(&config).unwrap();
+                let mut value_array = self.midi_ble_manager.read_value.lock().unwrap();
+                value_array.clear();
+                let return_value = stringified_config.as_bytes().to_vec();
+                value_array.extend(return_value);
+                return Ok(());
+            },
+            Command::WriteConfiguration(new_value) => {
+                println!("Received write configuration command: {:?}", new_value);
+                // if &new_value.first().unwrap().clone() == &WRITE_CONFIG_COMMAND_BYTE {
+                //     response_value.lock().unwrap().clear();
+                //     let return_value = vec![0x10, 0x01, 0x01, 0x10];
+                //     response_value.lock().unwrap().extend(return_value);
+                //     return Ok(());
+                // }
+            },
+        }
+        Ok(())
+    }
+
+
+    pub async fn handle_midi_command(&mut self, message_data: &Vec<u8>) -> Result<(), Box<dyn Error>> {
+        let mut last_status: u8 = 0x00;
+        let mut midi_data: Vec<u8> = vec![];
+        println!("Received MIDI command: {:?}", midi_data);
+        // iterate bytes (adding first status byte to end as they trigger send of previous data)
+        for byte in message_data.iter().chain([message_data.first().unwrap()]) {
+            // if the byte is a status or timestamp byte (non-data):
+            if MidiBle::is_status_byte(*byte) {
+                // if we just finished a note-on or note-off message group, send them over tx
+                if !midi_data.is_empty() {
+                    if last_status == 0x90 || last_status == 0x80 {
+                        // split midi data into chunks of 2 bytes (note number and velocity) and send over tx (to be handled by AutoDrum)
+                        for pair in midi_data.chunks(2) {
+                            let note_number = pair[0];
+                            let velocity = pair[1];
+                            self.handle_note(
+                                (last_status, note_number, velocity)
+                            ).await?;
+                            // tx.send((last_status, note_number, velocity)).unwrap();
+                        }
+                    }
+                    midi_data.clear();
+                }
+                last_status = *byte;
+            } else {
+                midi_data.push(*byte);
+            }
+        }
+        Ok(())
+    }
 
     pub async fn handle_note(&mut self, midi_data: (u8, u8, u8)) -> Result<(), Box<dyn Error>> {
         let (status, note, velocity) = midi_data;
@@ -209,6 +276,27 @@ impl AutoDrum {
             self.logger.log(LogEntry::Hit(hit_data));
         }
         Ok(())
+    }
+
+    fn export_configuration(&self) -> Configuration {
+        let mut drums = vec![];
+        for (note, drum) in self.drums.iter() {
+            drums.push(DrumRaw {
+                name: drum.get_name(),
+                note: *note,
+                pin: drum.get_pin_num(),
+                striker: drum.get_striker_kind(),
+            });
+        }
+        Configuration {
+            drums,
+        }
+    }
+
+    fn load_configuration(&mut self, config: Configuration) {
+        for drum in config.drums {
+            self.add_drum(drum.note, drum.pin, &drum.name, drum.striker).unwrap();
+        }
     }
 
     pub fn stop(&mut self) {
