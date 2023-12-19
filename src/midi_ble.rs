@@ -1,3 +1,4 @@
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use bluer::{
@@ -112,9 +113,9 @@ impl MidiBle {
     /// - Notify: Empty. Characteristic is required but not used.
     async fn midi_application(&self) -> Application {
         // Will likely need these later:
-        // let value = Arc::new(Mutex::new(vec![0x10, 0x01, 0x01, 0x10]));
-        // let value_read = value.clone();
-        // let value_write = value.clone();
+        let value = Arc::new(Mutex::new(vec![0x10, 0x01, 0x01, 0x10]));
+        let value_read = value.clone();
+        let value_write = value.clone();
         let tx_clone = self.tx.clone();
 
         Application {
@@ -130,8 +131,9 @@ impl MidiBle {
                             read: Some(CharacteristicRead {
                                 read: true,
                                 fun: Box::new(move | _req | {
+                                    let value_read = value_read.clone();
                                     Box::pin(async move {
-                                        Ok([].to_vec())
+                                        Ok(value_read.lock().unwrap().clone())
                                     })
                                 }),
                                 ..Default::default()
@@ -142,10 +144,19 @@ impl MidiBle {
                                 method: CharacteristicWriteMethod::Fun(Box::new(move |new_value, _req| {
                                     // let value = value_write.clone(); // Will likely need this later
                                     let tx = tx_clone.clone();
+                                    let response_value = value_write.clone();
 
                                     Box::pin(async move {
                                         let mut last_status: u8 = 0x00;
                                         let mut midi_data: Vec<u8> = vec![];
+
+                                        println!("Received MIDI data: {:?}", new_value);
+                                        if &new_value.first().unwrap().clone() == &0x00u8 {
+                                            response_value.lock().unwrap().clear();
+                                            let return_value = vec![0x10, 0x01, 0x01, 0x10];
+                                            response_value.lock().unwrap().extend(return_value);
+                                            return Ok(());
+                                        }
 
                                         // iterate bytes (adding first status byte to end as they trigger send of previous data)
                                         for byte in new_value.iter().chain([new_value.first().unwrap()]) {
