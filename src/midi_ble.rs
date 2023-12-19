@@ -36,7 +36,7 @@ pub struct MidiBle {
     /// The tokio channel to send MIDI events to the main AutoDrum application
     pub tx: tokio::sync::broadcast::Sender<Command>,
     /// The value of the MIDI characteristic
-    pub read_value: Arc<Mutex<Vec<u8>>>,
+    read_value: Arc<Mutex<Vec<u8>>>,
 }
 
 impl MidiBle {
@@ -101,6 +101,15 @@ impl MidiBle {
         let application = self.midi_application().await;
         self.app_handle = Some(adapter.serve_gatt_application(application).await?);
 
+        Ok(())
+    }
+
+    /// Send MIDI data over BLE by updating the MIDI characteristic value
+    pub fn send(&mut self, data: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let mut value_array = self.read_value.lock().unwrap();
+        value_array.clear();
+        let return_value = data.as_bytes().to_vec();
+        value_array.extend(return_value);
         Ok(())
     }
 

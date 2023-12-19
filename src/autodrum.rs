@@ -196,7 +196,6 @@ impl AutoDrum {
                             self.handle_note(
                                 (last_status, note_number, velocity)
                             ).await?;
-                            // tx.send((last_status, note_number, velocity)).unwrap();
                         }
                     }
                     midi_data.clear();
@@ -210,17 +209,13 @@ impl AutoDrum {
     }
 
     /// Collect & serialize the current configuration of the AutoDrum instance then send it over BLE
-    fn handle_read_configuration_command(&self, value: &Vec<u8>) -> Result<(), Box<dyn Error>> {
+    fn handle_read_configuration_command(&mut self, value: &Vec<u8>) -> Result<(), Box<dyn Error>> {
         println!("Received read configuration command: {:?}", value);
         let config = Configuration {
             drums: self.drums.iter().map(|(_, drum)| drum.export_raw()).collect(),
         };
         let stringified_config = serde_json::to_string(&config).unwrap();
-        let mut value_array = self.midi_ble_manager.read_value.lock().unwrap();
-        value_array.clear();
-        let return_value = stringified_config.as_bytes().to_vec();
-        value_array.extend(return_value);
-        return Ok(());
+        self.midi_ble_manager.send(&stringified_config)
     }
 
 
