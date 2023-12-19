@@ -3,6 +3,7 @@ use std::time::Instant;
 
 use rppal::gpio::Gpio;
 use rppal::gpio::OutputPin;
+use serde::{Deserialize, Serialize};
 use tokio_timerfd::Delay;
 
 use crate::striker::Striker;
@@ -19,6 +20,14 @@ pub struct Drum {
     pin: OutputPin,
     /// The type of striker used to hit this drum
     striker: Striker,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DrumRaw {
+    pub name: String,
+    pub note: u8,
+    pub pin: u8,
+    pub striker: Striker,
 }
 
 impl Drum {
@@ -76,8 +85,15 @@ impl Drum {
     }
 
     /// Get the raspberry pi GPIO pin number that controls the striker for this drum
-    pub fn get_pin_num(&self) -> u8 {
-        self.pin.pin()
+    pub fn get_pin_num(&self) -> u8 { self.pin.pin() }
+
+    pub fn export_raw(&self) -> DrumRaw {
+        DrumRaw {
+            name: self.name.clone(),
+            note: self.note,
+            pin: self.pin.pin(),
+            striker: self.striker,
+        }
     }
 
     /// Abort the current hit, turning off the striker early
