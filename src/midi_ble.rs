@@ -16,6 +16,7 @@ use bluer::agent::{Agent, AgentHandle};
 use bluer::gatt::local::ApplicationHandle;
 use uuid::{Uuid, uuid};
 use crate::remote_command::Command;
+use rand::Rng;
 
 // Specified by MIDI BLE spec, these are the UUIDs for the MIDI service and characteristic and should never change
 const BLE_MIDI_SERVICE_ID: Uuid = uuid!("03B80E5A-EDE8-4B33-A751-6CE34EC4C700");
@@ -108,8 +109,11 @@ impl MidiBle {
     pub fn send(&mut self, data: &str) -> Result<(), Box<dyn std::error::Error>> {
         let mut value_array = self.read_value.lock().unwrap();
         value_array.clear();
-        let return_value = data.as_bytes().to_vec();
-        value_array.extend(return_value);
+        // create 2 stamp bytes to add to the beginning of the message
+        let mut rng = rand::thread_rng();
+        let stamp: Vec<u8> = vec![rng.gen_range(1..255), rng.gen_range(1..255)];
+        value_array.extend(stamp);
+        value_array.extend(data.as_bytes().to_vec());
         Ok(())
     }
 
@@ -147,7 +151,9 @@ impl MidiBle {
                                 fun: Box::new(move | _req | {
                                     let value_read = value_read.clone();
                                     Box::pin(async move {
-                                        Ok(value_read.lock().unwrap().clone())
+                                        let send_value = value_read.lock().unwrap().clone();
+                                        println!("Send value: {:?}", send_value);
+                                        Ok(send_value)
                                     })
                                 }),
                                 ..Default::default()
@@ -156,6 +162,7 @@ impl MidiBle {
                                 write: true,
                                 write_without_response: true,
                                 method: CharacteristicWriteMethod::Fun(Box::new(move |new_value, _req| {
+                                    println!("Write value: {:?}", new_value);
                                     let tx = tx_clone.clone();
                                     Box::pin(async move {
                                         if let Ok(command) = Command::try_from(&new_value) {
