@@ -4,7 +4,8 @@ use std::error::Error;
 use std::time::{Instant, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::fs::File;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 use crate::drum::{Drum, DrumRaw};
 use crate::logger::{HitLogEntry, LogEntry, Logger};
@@ -329,6 +330,15 @@ impl AutoDrum {
         for drum in config.drums {
             self.add_drum(drum.note, drum.pin, &drum.name, drum.striker).unwrap();
         }
+    }
+
+    /// Save the current configuration of the AutoDrum instance to a file
+    pub async fn save_configuration_file(&self, path: &str) -> Result<(), Box<dyn Error>> {
+        let config = self.export_configuration();
+        let stringified_config = serde_json::to_string(&config).unwrap();
+        let mut file = File::create(path).await?;
+        file.write_all(stringified_config.as_bytes()).await?;
+        Ok(())
     }
 
     //--------------------------------------------------------------------------------
