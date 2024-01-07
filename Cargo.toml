@@ -15,4 +15,6 @@ serde_json = "1.0.108"
 serde = { version = "1.0.193", features = ["derive"] }
 tokio-timerfd = "0.2.0"
 rand = "0.8.5"
+serde_yaml = "0.9.25"
+lazy_static = "1.4.0"
 

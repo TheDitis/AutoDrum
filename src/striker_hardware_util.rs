@@ -1,16 +1,5 @@
 use serde::{Deserialize, Serialize};
-
-// Large solenoid constants
-const SOLENOID_LG_MIN_HIT_DURATION_MS: f64 = 8.0;
-const SOLENOID_LG_MAX_HIT_DURATION_MS: f64 = 75.0;
-const SOLENOID_LG_DEFAULT_MIN_HIT_DURATION_MS: f64 = 30.0;
-const SOLENOID_LG_DEFAULT_MAX_HIT_DURATION_MS: f64 = 50.0;
-
-// Small solenoid constants
-const SOLENOID_SM_MIN_HIT_DURATION_MS: f64 = 0.1;
-const SOLENOID_SM_MAX_HIT_DURATION_MS: f64 = 2.0;
-const SOLENOID_SM_DEFAULT_MIN_HIT_DURATION_MS: f64 = 0.2;
-const SOLENOID_SM_DEFAULT_MAX_HIT_DURATION_MS: f64 = 1.5;
+use crate::system_config::{StrikerConfig, SYSTEM_CONFIG};
 
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -34,31 +23,26 @@ impl TryFrom<&str> for StrikerHardwareKind {
 pub struct StrikerHardwareUtil {}
 
 impl StrikerHardwareUtil {
-    pub fn get_min_hit_duration(striker_kind: StrikerHardwareKind) -> f64 {
+    fn get_config(striker_kind: StrikerHardwareKind) -> &'static StrikerConfig {
         match striker_kind {
-            StrikerHardwareKind::SolenoidBig => SOLENOID_LG_MIN_HIT_DURATION_MS,
-            StrikerHardwareKind::SolenoidSmall => SOLENOID_SM_MIN_HIT_DURATION_MS,
+            StrikerHardwareKind::SolenoidBig => &SYSTEM_CONFIG.strikers.SolenoidBig,
+            StrikerHardwareKind::SolenoidSmall => &SYSTEM_CONFIG.strikers.SolenoidSmall,
         }
+    }
+
+    pub fn get_min_hit_duration(striker_kind: StrikerHardwareKind) -> f64 {
+        StrikerHardwareUtil::get_config(striker_kind).min_min_hit_duration
     }
 
     pub fn get_max_hit_duration(striker_kind: StrikerHardwareKind) -> f64 {
-        match striker_kind {
-            StrikerHardwareKind::SolenoidBig => SOLENOID_LG_MAX_HIT_DURATION_MS,
-            StrikerHardwareKind::SolenoidSmall => SOLENOID_SM_MAX_HIT_DURATION_MS,
-        }
+        StrikerHardwareUtil::get_config(striker_kind).max_max_hit_duration
     }
 
     pub fn get_default_min_hit_duration(striker_kind: StrikerHardwareKind) -> f64 {
-        match striker_kind {
-            StrikerHardwareKind::SolenoidBig => SOLENOID_LG_DEFAULT_MIN_HIT_DURATION_MS,
-            StrikerHardwareKind::SolenoidSmall => SOLENOID_SM_DEFAULT_MIN_HIT_DURATION_MS,
-        }
+        StrikerHardwareUtil::get_config(striker_kind).default_min_hit_duration
     }
 
     pub fn get_default_max_hit_duration(striker_kind: StrikerHardwareKind) -> f64 {
-        match striker_kind {
-            StrikerHardwareKind::SolenoidBig => SOLENOID_LG_DEFAULT_MAX_HIT_DURATION_MS,
-            StrikerHardwareKind::SolenoidSmall => SOLENOID_SM_DEFAULT_MAX_HIT_DURATION_MS,
-        }
+        StrikerHardwareUtil::get_config(striker_kind).default_max_hit_duration
     }
 }

@@ -1,0 +1,17 @@
+strikers:
+  SolenoidBig:
+    min_min_hit_duration: 8.0
+    max_min_hit_duration: 50.0
+    min_max_hit_duration: 25.0
+    max_max_hit_duration: 75.0
+    default_min_hit_duration: 30.0
+    default_max_hit_duration: 50.0
+    increment: 0.2
+  SolenoidSmall:
+    min_min_hit_duration: 0.1
+    max_min_hit_duration: 0.5
+    min_max_hit_duration: 0.3
+    max_max_hit_duration: 2.0
+    default_min_hit_duration: 0.2
+    default_max_hit_duration: 1.5
+    increment: 0.01
