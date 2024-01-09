@@ -28,7 +28,7 @@ pub struct StrikerConfigs {
 }
 
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct SystemConfig {
     pub strikers: StrikerConfigs,
 }
