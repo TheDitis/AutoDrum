@@ -1,6 +1,6 @@
 use config::Config;
 use serde::{Deserialize, Serialize};
-use crate::striker::StrikerData;
+use crate::hardware::striker::StrikerData;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Configuration {
@@ -11,7 +11,7 @@ impl Configuration {
     pub fn load() -> Self {
         // load system-constants.yaml and parse it into a Configuration struct
         Config::builder()
-            .add_source(config::File::with_name("config.yaml").required(true))
+            .add_source(config::File::with_name("configuration.yaml").required(true))
             .build()
             .unwrap()
             .try_deserialize()

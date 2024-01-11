@@ -1,9 +1,5 @@
-pub mod midi_ble;
 pub mod autodrum;
-pub mod striker;
-pub mod logger;
-pub mod modifier;
-pub mod remote_command;
-pub mod striker_hardware_util;
-pub mod system_constants;
-pub mod configuration;
+pub mod comms;
+pub mod hardware;
+pub mod system;
+pub mod debug;

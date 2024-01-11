@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
-use crate::striker_hardware_util::StrikerHardwareKind;
+use crate::hardware::striker_hardware_util::StrikerHardwareKind;
 
 /// A log entry representing a Striker fire
 #[derive(Debug, Serialize, Deserialize)]

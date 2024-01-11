@@ -15,7 +15,7 @@ use bluer::adv::AdvertisementHandle;
 use bluer::agent::{Agent, AgentHandle};
 use bluer::gatt::local::ApplicationHandle;
 use uuid::{Uuid, uuid};
-use crate::remote_command::Command;
+use crate::comms::remote_command::Command;
 use rand::Rng;
 
 // Specified by MIDI BLE spec, these are the UUIDs for the MIDI service and characteristic and should never change

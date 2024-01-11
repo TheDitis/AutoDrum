@@ -5,14 +5,14 @@ use std::time::{Instant, UNIX_EPOCH};
 
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use crate::configuration::{Configuration};
+use crate::system::configuration::{Configuration};
 
-use crate::striker::{Striker, StrikerData};
-use crate::logger::{StrikeLogEntry, LogEntry, Logger};
-use crate::midi_ble::MidiBle;
-use crate::modifier::{Modifier, ModifierHardwareKind};
-use crate::remote_command::Command;
-use crate::system_constants::SYSTEM_CONSTANTS;
+use crate::hardware::striker::{Striker, StrikerData};
+use crate::debug::logger::{StrikeLogEntry, LogEntry, Logger};
+use crate::comms::midi_ble::MidiBle;
+use crate::hardware::modifier::{Modifier, ModifierHardwareKind};
+use crate::comms::remote_command::Command;
+use crate::system::system_constants::SYSTEM_CONSTANTS;
 
 
 /// Main application struct

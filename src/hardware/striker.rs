@@ -6,7 +6,7 @@ use rppal::gpio::OutputPin;
 use serde::{Deserialize, Serialize};
 use tokio_timerfd::Delay;
 
-use crate::striker_hardware_util::{StrikerHardwareKind, StrikerHardwareUtil};
+use crate::hardware::striker_hardware_util::{StrikerHardwareKind, StrikerHardwareUtil};
 
 
 const MAX_HIT_DURATION_MS: f64 = 400.0;

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use crate::system_constants::{StrikerConstants, SYSTEM_CONSTANTS};
+use crate::system::system_constants::{StrikerConstants, SYSTEM_CONSTANTS};
 
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
