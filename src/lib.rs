@@ -6,3 +6,4 @@ pub mod modifier;
 pub mod remote_command;
 pub mod striker_hardware_util;
 pub mod system_constants;
+pub mod configuration;

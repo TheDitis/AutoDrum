@@ -1,0 +1,13 @@
+strikers:
+  - name: "Kick"
+    kind: "SolenoidBig"
+    pin: 7
+    note: 36
+  - name: "Snare"
+    kind: "SolenoidSmall"
+    pin: 6
+    note: 37
+  - name: "HiHat"
+    kind: "SolenoidSmall"
+    pin: 5
+    note: 38

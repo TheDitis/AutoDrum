@@ -22,32 +22,32 @@ pub struct Striker {
     /// Type of striker hardware this Striker uses
     kind: StrikerHardwareKind,
     /// Minimum duration of the hit in milliseconds
-    min_hit_duration: f64,
+    min_hit_duration: Option<f64>,
     /// Maximum duration of the hit in milliseconds
-    max_hit_duration: f64,
+    max_hit_duration: Option<f64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct StrikerRaw {
+#[derive(Debug, Deserialize, Serialize)]
+pub struct StrikerData {
     pub name: String,
-    pub note: u8,
     pub pin: u8,
     pub kind: StrikerHardwareKind,
-    pub min_hit_duration: f64,
-    pub max_hit_duration: f64,
+    pub note: u8,
+    pub min_hit_duration: Option<f64>,
+    pub max_hit_duration: Option<f64>
 }
 
 impl Striker {
     /// Create a new Striker
-    pub fn new(note_num: u8, pin_num: u8, name: &str, striker: StrikerHardwareKind) -> Self {
+    pub fn new(note_num: u8, pin_num: u8, name: &str, kind: StrikerHardwareKind) -> Self {
         let output_pin = Gpio::new().unwrap().get(pin_num).unwrap().into_output();
         Self {
             name: name.to_string(),
             note: note_num,
             pin: output_pin,
-            kind: striker,
-            min_hit_duration: StrikerHardwareUtil::get_default_min_hit_duration(striker),
-            max_hit_duration: StrikerHardwareUtil::get_max_hit_duration(striker),
+            kind,
+            min_hit_duration: None,
+            max_hit_duration: None,
         }
     }
 
@@ -70,7 +70,9 @@ impl Striker {
     /// Get the duration of the hit based on striker type and velocity, clamping if necessary
     pub fn get_strike_duration(&self, velocity: u8) -> Duration {
         // Get the duration of the hit, clamping if necessary
-        let mut duration = self.min_hit_duration + ((velocity as f64 * self.max_hit_duration) / 127.0);
+        let min_hit_duration = self.get_min_hit_duration();
+        let max_hit_duration = self.get_max_hit_duration();
+        let mut duration = min_hit_duration + ((velocity as f64 * max_hit_duration) / 127.0);
         if duration > MAX_HIT_DURATION_MS {
             duration = MAX_HIT_DURATION_MS;
             println!("Clamped hit duration to {}", duration)
@@ -97,25 +99,49 @@ impl Striker {
     pub fn get_pin_num(&self) -> u8 { self.pin.pin() }
 
     /// Get the minimum duration of the hit in milliseconds
-    pub fn get_min_hit_duration(&self) -> f64 { self.min_hit_duration }
+    pub fn get_min_hit_duration(&self) -> f64 {
+        self.min_hit_duration.unwrap_or(
+            StrikerHardwareUtil::get_default_min_hit_duration(self.kind)
+        )
+    }
 
     /// Get the maximum duration of the hit in milliseconds
-    pub fn get_max_hit_duration(&self) -> f64 { self.max_hit_duration }
+    pub fn get_max_hit_duration(&self) -> f64 {
+        self.max_hit_duration.unwrap_or(
+            StrikerHardwareUtil::get_max_hit_duration(self.kind)
+        )
+    }
 
-    pub fn export_raw(&self) -> StrikerRaw {
-        StrikerRaw {
+    /// Export
+    pub fn export_raw(&self) -> StrikerData {
+        StrikerData {
             name: self.name.clone(),
             note: self.note,
             pin: self.pin.pin(),
             kind: self.kind,
-            min_hit_duration: self.min_hit_duration,
-            max_hit_duration: self.max_hit_duration,
+            min_hit_duration: Some(self.get_min_hit_duration()),
+            max_hit_duration: Some(self.get_max_hit_duration()),
         }
     }
 
     /// Abort the current hit, turning off the striker early
     pub fn abort(&mut self) {
         self.pin.set_low();
+    }
+}
+
+impl TryFrom<StrikerData> for Striker {
+    type Error = String;
+
+    fn try_from(config: StrikerData) -> Result<Self, Self::Error> {
+        Ok(Self {
+            name: config.name,
+            note: config.note,
+            pin: Gpio::new().unwrap().get(config.pin).unwrap().into_output(),
+            kind: config.kind,
+            min_hit_duration: config.min_hit_duration,
+            max_hit_duration: config.max_hit_duration,
+        })
     }
 }
 

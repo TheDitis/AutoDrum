@@ -3,22 +3,17 @@ use std::env;
 use std::error::Error;
 use std::time::{Instant, UNIX_EPOCH};
 
-use serde::{Deserialize, Serialize};
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use crate::configuration::{Configuration};
 
-use crate::striker::{Striker, StrikerRaw};
+use crate::striker::{Striker, StrikerData};
 use crate::logger::{StrikeLogEntry, LogEntry, Logger};
 use crate::midi_ble::MidiBle;
 use crate::modifier::{Modifier, ModifierHardwareKind};
 use crate::remote_command::Command;
-use crate::striker_hardware_util::StrikerHardwareKind;
 use crate::system_constants::SYSTEM_CONSTANTS;
 
-#[derive(Serialize, Deserialize)]
-struct Configuration {
-    strikers: Vec<StrikerRaw>,
-}
 
 /// Main application struct
 pub struct AutoDrum {
@@ -60,7 +55,7 @@ impl AutoDrum {
             );
         }
 
-        AutoDrum {
+        let mut instance = AutoDrum {
             midi_ble_manager,
             striker_name_to_note,
             strikers,
@@ -69,7 +64,9 @@ impl AutoDrum {
             striker_modifiers,
             debug,
             logger: Logger::new(),
-        }
+        };
+        instance.load_configuration();
+        instance
     }
 
     /// Ensure that a given note number is not already in use by a striker or modifier
@@ -91,17 +88,11 @@ impl AutoDrum {
     }
 
     /// Add a new Striker to the AutoDrum instance
-    pub fn add_striker(
-        &mut self,
-        note: u8,
-        pin_num: u8,
-        name: &str,
-        striker_kind: StrikerHardwareKind,
-    ) -> Result<(), Box<dyn Error>> {
-        self.enforce_unique_note_num(note)?;
-        self.enforce_unique_name(name)?;
-        self.striker_name_to_note.insert(name.to_string(), note);
-        self.strikers.insert(note, Striker::new(note, pin_num, name, striker_kind));
+    pub fn add_striker(&mut self, striker: Striker) -> Result<(), Box<dyn Error>> {
+        self.enforce_unique_note_num(striker.note)?;
+        self.enforce_unique_name(&striker.name)?;
+        self.striker_name_to_note.insert(striker.name.clone(), striker.note);
+        self.strikers.insert(striker.note, striker);
         Ok(())
     }
 
@@ -319,13 +310,13 @@ impl AutoDrum {
     fn export_configuration(&self) -> Configuration {
         let mut strikers = vec![];
         for (note, striker) in self.strikers.iter() {
-            strikers.push(StrikerRaw {
+            strikers.push(StrikerData {
                 name: striker.get_name(),
                 note: *note,
                 pin: striker.get_pin_num(),
                 kind: striker.get_striker_kind(),
-                min_hit_duration: striker.get_min_hit_duration(),
-                max_hit_duration: striker.get_max_hit_duration(),
+                min_hit_duration: Some(striker.get_min_hit_duration()),
+                max_hit_duration: Some(striker.get_max_hit_duration()),
             });
         }
         Configuration {
@@ -334,9 +325,11 @@ impl AutoDrum {
     }
 
     /// Load a configuration into the AutoDrum instance
-    fn load_configuration(&mut self, config: Configuration) {
-        for striker in config.strikers {
-            self.add_striker(striker.note, striker.pin, &striker.name, striker.kind).unwrap();
+    fn load_configuration(&mut self) {
+        let config = Configuration::load();
+        for strikerData in config.strikers {
+            let striker = Striker::try_from(strikerData).unwrap();
+            self.add_striker(striker).unwrap();
         }
     }
 
