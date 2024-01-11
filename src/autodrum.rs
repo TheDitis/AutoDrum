@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
-use crate::drum::{Drum, DrumRaw};
-use crate::logger::{HitLogEntry, LogEntry, Logger};
+use crate::striker::{Striker, StrikerRaw};
+use crate::logger::{StrikeLogEntry, LogEntry, Logger};
 use crate::midi_ble::MidiBle;
 use crate::modifier::{Modifier, ModifierHardwareKind};
 use crate::remote_command::Command;
@@ -17,24 +17,24 @@ use crate::system_constants::SYSTEM_CONSTANTS;
 
 #[derive(Serialize, Deserialize)]
 struct Configuration {
-    drums: Vec<DrumRaw>,
+    strikers: Vec<StrikerRaw>,
 }
 
 /// Main application struct
 pub struct AutoDrum {
     /// The BLE MIDI manager that brings us any relevant MIDI data sent to the BLE MIDI service
     midi_ble_manager: MidiBle,
-    /// A map of drum names to their respective MIDI note numbers (mainly for linking modifiers to drums with human-readable names)
-    drum_name_to_note: HashMap<String, u8>,
-    /// A map of MIDI note numbers to their respective drums
-    drums: HashMap<u8, Drum>,
+    /// A map of striker names to their respective MIDI note numbers (mainly for linking modifiers to strikers with human-readable names)
+    striker_name_to_note: HashMap<String, u8>,
+    /// A map of MIDI note numbers to their respective Strikers
+    strikers: HashMap<u8, Striker>,
     /// A map of MIDI note numbers to their respective modifiers
-    /// Modifiers are hardware outputs (Strikers) that change the behavior of a drum, e.g. "open" for a hi-hat
+    /// Modifiers are hardware outputs (Strikers) that change the behavior of a striker, e.g. "open" for a hi-hat
     modifiers: HashMap<u8, Modifier>,
-    /// A map of MIDI note numbers for a given modified hit to the MIDI note number of the drum that the modifier is modifying
+    /// A map of MIDI note numbers for a given modified hit to the MIDI note number of the striker that the modifier is modifying
     modifier_targets: HashMap<u8, u8>,
-    /// A map of drum note numbers to a vec of their respective modifier note numbers
-    drum_modifiers: HashMap<u8, Vec<u8>>,
+    /// A map of striker note numbers to a vec of their respective modifier note numbers
+    striker_modifiers: HashMap<u8, Vec<u8>>,
     /// Whether or not to collect log data to save on exit
     debug: bool,
     /// The logger that collects and saves log data
@@ -45,11 +45,11 @@ impl AutoDrum {
     /// Create a new AutoDrum instance
     pub async fn new() -> Self {
         let midi_ble_manager = MidiBle::new().await;
-        let drum_name_to_note = HashMap::new();
-        let drums = HashMap::new();
+        let striker_name_to_note = HashMap::new();
+        let strikers = HashMap::new();
         let modifiers = HashMap::new();
         let modifier_targets = HashMap::new();
-        let drum_modifiers = HashMap::new();
+        let striker_modifiers = HashMap::new();
 
         let debug = env::args().any(|arg| arg == "--debug");
         if debug {
@@ -62,36 +62,36 @@ impl AutoDrum {
 
         AutoDrum {
             midi_ble_manager,
-            drum_name_to_note,
-            drums,
+            striker_name_to_note,
+            strikers,
             modifiers,
             modifier_targets,
-            drum_modifiers,
+            striker_modifiers,
             debug,
             logger: Logger::new(),
         }
     }
 
-    /// Ensure that a given note number is not already in use by a drum or modifier
+    /// Ensure that a given note number is not already in use by a striker or modifier
     pub fn enforce_unique_note_num(&mut self, note: u8) -> Result<(), Box<dyn Error>> {
-        if self.drums.contains_key(&note) {
-            return Err(format!("Drum with note number {} already exists", note).into());
+        if self.strikers.contains_key(&note) {
+            return Err(format!("Striker with note number {} already exists", note).into());
         } else if self.modifiers.contains_key(&note) {
             return Err(format!("Modifier with note number {} already exists", note).into());
         }
         Ok(())
     }
 
-    /// Ensure that a given name is not already in use by a drum
+    /// Ensure that a given name is not already in use by a striker
     pub fn enforce_unique_name(&mut self, name: &str) -> Result<(), Box<dyn Error>> {
-        if self.drum_name_to_note.contains_key(name) {
-            return Err(format!("Drum with name {} already exists", name).into());
+        if self.striker_name_to_note.contains_key(name) {
+            return Err(format!("Striker with name {} already exists", name).into());
         }
         Ok(())
     }
 
-    /// Add a new drum to the AutoDrum instance
-    pub fn add_drum(
+    /// Add a new Striker to the AutoDrum instance
+    pub fn add_striker(
         &mut self,
         note: u8,
         pin_num: u8,
@@ -100,15 +100,15 @@ impl AutoDrum {
     ) -> Result<(), Box<dyn Error>> {
         self.enforce_unique_note_num(note)?;
         self.enforce_unique_name(name)?;
-        self.drum_name_to_note.insert(name.to_string(), note);
-        self.drums.insert(note, Drum::new(note, pin_num, name, striker_kind));
+        self.striker_name_to_note.insert(name.to_string(), note);
+        self.strikers.insert(note, Striker::new(note, pin_num, name, striker_kind));
         Ok(())
     }
 
     /// Add a new modifier to the AutoDrum instance
     pub fn add_modifier(
         &mut self,
-        target_drum_name: &str,
+        target_striker_name: &str,
         note: u8,
         pin_num: u8,
         name: &str,
@@ -117,7 +117,7 @@ impl AutoDrum {
         self.enforce_unique_note_num(note)?;
         self.enforce_unique_name(name)?;
         self.modifiers.insert(note, Modifier::new(name, note, pin_num, striker_kind));
-        self.modifier_targets.insert(note, self.drum_name_to_note.get(target_drum_name).ok_or(format!("No drum with name {} exists", target_drum_name))?.clone());
+        self.modifier_targets.insert(note, self.striker_name_to_note.get(target_striker_name).ok_or(format!("No striker with name {} exists", target_striker_name))?.clone());
         Ok(())
     }
 
@@ -221,7 +221,7 @@ impl AutoDrum {
     fn handle_read_configuration_command(&mut self, value: &Vec<u8>) -> Result<(), Box<dyn Error>> {
         println!("Received read configuration command: {:?}", value);
         let config = Configuration {
-            drums: self.drums.iter().map(|(_, drum)| drum.export_raw()).collect(),
+            strikers: self.strikers.iter().map(|(_, striker)| striker.export_raw()).collect(),
         };
         let stringified_config = serde_json::to_string(&config)?;
         self.midi_ble_manager.send(&stringified_config)
@@ -235,7 +235,7 @@ impl AutoDrum {
     /// Handle a note-on or note-off event
     pub async fn handle_note(&mut self, midi_data: (u8, u8, u8)) -> Result<(), Box<dyn Error>> {
         let (status, note, velocity) = midi_data;
-        // If it's a note on event, hit the drum
+        // If it's a note on event, trigger the striker
         if status == 0x90 {
             if !self.debug {
                 self.hit(note, velocity).await?;
@@ -253,60 +253,60 @@ impl AutoDrum {
         Ok(())
     }
 
-    /// Hit a drum, activating any modifiers linked to the given note in tandem
+    /// Trigger a striker, activating any modifiers linked to the given note in tandem
     pub async fn hit(&mut self, note: u8, velocity: u8) -> Result<(), Box<dyn Error>> {
-        // If hitting the drum directly, not a modified version of it:
-        if let Some(drum) = self.drums.get_mut(&note) {
-            // Deactivate any modifiers that are currently active for this drum
-            if self.drum_modifiers.contains_key(&note) {
-                for modifier_note in self.drum_modifiers.get(&note).unwrap() {
+        // If firing a striker directly, not a modified version of it:
+        if let Some(striker) = self.strikers.get_mut(&note) {
+            // Deactivate any modifiers that are currently active for this striker
+            if self.striker_modifiers.contains_key(&note) {
+                for modifier_note in self.striker_modifiers.get(&note).unwrap() {
                     if let Some(modifier) = self.modifiers.get_mut(modifier_note) {
                         modifier.deactivate();
                     }
                 }
             }
-            // Hit the drum
-            drum.hit(velocity).await?;
+            // Fire the striker
+            striker.strike(velocity).await?;
         }
-        // If hitting a modified version of a drum:
+        // If firing with a modifier:
         else if let Some(modifier) = self.modifiers.get_mut(&note) {
             if let Some(target_note) = self.modifier_targets.get(&note) {
-                if let Some(target_drum) = self.drums.get_mut(target_note) {
-                    // Activate the modifier, then hit the drum, then start a timer to deactivate the modifier
+                if let Some(striker) = self.strikers.get_mut(target_note) {
+                    // Activate the modifier, then fire the striker, then start a timer to deactivate the modifier
                     modifier.activate();
-                    // TODO: May need to add a delay here to ensure the modifier has time to activate before the drum is hit
+                    // TODO: May need to add a delay here to ensure the modifier has time to activate before the striker is fired
                     // modifier.start_deactivation_timer() // May need to add this back in
-                    target_drum.hit(velocity).await?;
+                    striker.strike(velocity).await?;
                 }
             }
         }
         Ok(())
     }
 
-    /// Hit a drum, logging data about the hit
+    /// Fire a striker, logging data about the hit
     /// TODO: add modifiers to logging once they're fully implemented
     pub async fn hit_with_debug(&mut self, note: u8, velocity: u8, midi_data: (u8, u8, u8)) -> Result<(), Box<dyn Error>> {
-        if let Some(drum) = self.drums.get_mut(&note) {
+        if let Some(striker) = self.strikers.get_mut(&note) {
             let time = std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
             let start = Instant::now();
-            drum.hit(velocity).await?;
+            striker.strike(velocity).await?;
             let actual_duration_ns = start.elapsed().as_nanos() as u64;
             // Collect data about the hit and give it to the logger
-            let hit_data = HitLogEntry {
+            let hit_data = StrikeLogEntry {
                 time,
                 ms_since_last: if let Some(last_hit_time) = self.logger.last_hit_time() {
                     time - last_hit_time
                 } else { 0 },
-                planned_duration_ns: drum.get_strike_duration(velocity).as_nanos() as u64,
+                planned_duration_ns: striker.get_strike_duration(velocity).as_nanos() as u64,
                 actual_duration_ns,
-                striker_kind: drum.get_striker_kind(),
+                striker_kind: striker.get_striker_kind(),
                 midi_data,
                 note_num: note,
                 velocity,
-                drum_name: drum.get_name(),
-                target_pin: drum.get_pin_num(),
+                striker_name: striker.get_name(),
+                target_pin: striker.get_pin_num(),
             };
-            self.logger.log(LogEntry::Hit(hit_data));
+            self.logger.log(LogEntry::Strike(hit_data));
         }
         Ok(())
     }
@@ -317,26 +317,26 @@ impl AutoDrum {
 
     /// Export the current configuration of the AutoDrum instance
     fn export_configuration(&self) -> Configuration {
-        let mut drums = vec![];
-        for (note, drum) in self.drums.iter() {
-            drums.push(DrumRaw {
-                name: drum.get_name(),
+        let mut strikers = vec![];
+        for (note, striker) in self.strikers.iter() {
+            strikers.push(StrikerRaw {
+                name: striker.get_name(),
                 note: *note,
-                pin: drum.get_pin_num(),
-                striker: drum.get_striker_kind(),
-                min_hit_duration: drum.get_min_hit_duration(),
-                max_hit_duration: drum.get_max_hit_duration(),
+                pin: striker.get_pin_num(),
+                kind: striker.get_striker_kind(),
+                min_hit_duration: striker.get_min_hit_duration(),
+                max_hit_duration: striker.get_max_hit_duration(),
             });
         }
         Configuration {
-            drums,
+            strikers,
         }
     }
 
     /// Load a configuration into the AutoDrum instance
     fn load_configuration(&mut self, config: Configuration) {
-        for drum in config.drums {
-            self.add_drum(drum.note, drum.pin, &drum.name, drum.striker).unwrap();
+        for striker in config.strikers {
+            self.add_striker(striker.note, striker.pin, &striker.name, striker.kind).unwrap();
         }
     }
 
@@ -355,7 +355,7 @@ impl AutoDrum {
 
     /// Make sure no pins are left in the "on" state when the program exits
     pub fn stop(&mut self) {
-        self.drums.iter_mut().for_each(|(_, drum)| drum.abort());
+        self.strikers.iter_mut().for_each(|(_, striker)| striker.abort());
         self.modifiers.iter_mut().for_each(|(_, modifier)| modifier.deactivate());
     }
 }

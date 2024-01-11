@@ -3,9 +3,9 @@ use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use crate::striker_hardware_util::StrikerHardwareKind;
 
-/// A log entry representing a drum hit
+/// A log entry representing a Striker fire
 #[derive(Debug, Serialize, Deserialize)]
-pub struct HitLogEntry {
+pub struct StrikeLogEntry {
     /// UNIX timestamp but in milliseconds
     pub time: u64,
     /// milliseconds since the last hit (0 if this is the first hit)
@@ -22,20 +22,20 @@ pub struct HitLogEntry {
     pub note_num: u8,
     /// The velocity value of the midi data
     pub velocity: u8,
-    /// The name of the drum that was hit
-    pub drum_name: String,
-    /// The raspberry pi pin number of the drum that was hit
+    /// The name of the striker that was fired
+    pub striker_name: String,
+    /// The raspberry pi pin number of the striker that was fired
     pub target_pin: u8,
 }
 
 pub enum LogEntry {
-    /// represents a drum hit triggered by incoming MIDI data
-    Hit(HitLogEntry),
+    /// represents a striker fire triggered by incoming MIDI data
+    Strike(StrikeLogEntry),
 }
 
 pub struct Logger {
     /// A stack of all the hits that have been logged
-    hit_log: Vec<HitLogEntry>,
+    hit_log: Vec<StrikeLogEntry>,
 }
 
 impl Logger {
@@ -49,7 +49,7 @@ impl Logger {
     /// Log a given entry to its respective collection
     pub fn log(&mut self, entry: LogEntry) {
         match entry {
-            LogEntry::Hit(hit) => self.hit_log.push(hit),
+            LogEntry::Strike(hit) => self.hit_log.push(hit),
         }
     }
 

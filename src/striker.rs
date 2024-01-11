@@ -11,16 +11,16 @@ use crate::striker_hardware_util::{StrikerHardwareKind, StrikerHardwareUtil};
 
 const MAX_HIT_DURATION_MS: f64 = 400.0;
 
-/// Represents a drum that can be hit
-pub struct Drum {
-    /// Human-readable name of the drum (e.g. "Snare" or "Ride Bell)
+/// Represents a Striker that can be triggered, usually tied to a drum or other percussion target
+pub struct Striker {
+    /// Human-readable name for the Striker (e.g. "Snare" or "Ride Bell")
     pub name: String,
-    /// MIDI note number that triggers this drum
+    /// MIDI note number that triggers this Striker
     pub note: u8,
-    /// GPIO pin that controls the striker
+    /// GPIO pin that controls the Striker hardware
     pin: OutputPin,
-    /// Type of striker used to hit this drum
-    striker: StrikerHardwareKind,
+    /// Type of striker hardware this Striker uses
+    kind: StrikerHardwareKind,
     /// Minimum duration of the hit in milliseconds
     min_hit_duration: f64,
     /// Maximum duration of the hit in milliseconds
@@ -28,31 +28,31 @@ pub struct Drum {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct DrumRaw {
+pub struct StrikerRaw {
     pub name: String,
     pub note: u8,
     pub pin: u8,
-    pub striker: StrikerHardwareKind,
+    pub kind: StrikerHardwareKind,
     pub min_hit_duration: f64,
     pub max_hit_duration: f64,
 }
 
-impl Drum {
-    /// Create a new drum
+impl Striker {
+    /// Create a new Striker
     pub fn new(note_num: u8, pin_num: u8, name: &str, striker: StrikerHardwareKind) -> Self {
         let output_pin = Gpio::new().unwrap().get(pin_num).unwrap().into_output();
         Self {
             name: name.to_string(),
             note: note_num,
             pin: output_pin,
-            striker,
+            kind: striker,
             min_hit_duration: StrikerHardwareUtil::get_default_min_hit_duration(striker),
             max_hit_duration: StrikerHardwareUtil::get_max_hit_duration(striker),
         }
     }
 
-    /// Hit the drum, triggering the striker for a given duration specified by the striker type and velocity
-    pub async fn hit(&mut self, velocity: u8) -> Result<(), std::io::Error> {
+    /// Set off the striker, triggering the striker for a given duration specified by the striker type and velocity
+    pub async fn strike(&mut self, velocity: u8) -> Result<(), std::io::Error> {
         if !self.pin.is_set_high() {
             let duration = self.get_strike_duration(velocity);
 
@@ -63,7 +63,7 @@ impl Drum {
             let delay = Delay::new(Instant::now() + duration)?;
             delay.await?;
             self.pin.set_low();
-        } else { println!("Drum already hit, ignoring") }
+        } else { println!("Striker already activated, ignoring") }
         Ok(())
     }
 
@@ -78,22 +78,22 @@ impl Drum {
         Duration::from_micros((duration * 1000.0) as u64)
     }
 
-    /// Get the name of the drum
+    /// Get the name of the Striker
     pub fn get_name(&self) -> String {
         self.name.clone()
     }
 
-    /// Get the MIDI note number of the drum
+    /// Get the MIDI note number of the Striker
     pub fn get_note_num(&self) -> u8 {
         self.note
     }
 
-    /// Get the type of striker used to hit the drum
+    /// Get the type of striker used to hit the Striker
     pub fn get_striker_kind(&self) -> StrikerHardwareKind {
-        self.striker
+        self.kind
     }
 
-    /// Get the raspberry pi GPIO pin number that controls the striker for this drum
+    /// Get the raspberry pi GPIO pin number that controls the striker for this Striker
     pub fn get_pin_num(&self) -> u8 { self.pin.pin() }
 
     /// Get the minimum duration of the hit in milliseconds
@@ -102,12 +102,12 @@ impl Drum {
     /// Get the maximum duration of the hit in milliseconds
     pub fn get_max_hit_duration(&self) -> f64 { self.max_hit_duration }
 
-    pub fn export_raw(&self) -> DrumRaw {
-        DrumRaw {
+    pub fn export_raw(&self) -> StrikerRaw {
+        StrikerRaw {
             name: self.name.clone(),
             note: self.note,
             pin: self.pin.pin(),
-            striker: self.striker,
+            kind: self.kind,
             min_hit_duration: self.min_hit_duration,
             max_hit_duration: self.max_hit_duration,
         }
@@ -119,8 +119,8 @@ impl Drum {
     }
 }
 
-/// Automatically turn off the striker when the drum is dropped (e.g. there's a panic during a hit)
-impl Drop for Drum {
+/// Automatically turn off the striker when the Striker is dropped (e.g. there's a panic during a hit)
+impl Drop for Striker {
     fn drop(&mut self) {
         self.pin.set_low();
     }
