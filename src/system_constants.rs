@@ -1,5 +1,6 @@
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
+use config::{Config, File, FileFormat};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct StrikerConstants {
@@ -36,9 +37,12 @@ pub struct SystemConstants {
 lazy_static! {
     pub static ref SYSTEM_CONSTANTS: SystemConstants = {
         // load system-constants.yaml and parse it into a SystemConstants struct
-        let f = std::fs::File::open("system-constants.yaml").expect("Unable to open system-constants.yaml");
-        let const_map: SystemConstants = serde_yaml::from_reader(f).expect("Unable to parse system-constants.yaml");
-        const_map
+        Config::builder()
+            .add_source(File::with_name("system-constants.yaml").required(true))
+            .build()
+            .unwrap()
+            .try_deserialize()
+            .unwrap()
     };
 }
 
