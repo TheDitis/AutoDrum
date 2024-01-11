@@ -13,7 +13,7 @@ use crate::midi_ble::MidiBle;
 use crate::modifier::{Modifier, ModifierHardwareKind};
 use crate::remote_command::Command;
 use crate::striker_hardware_util::StrikerHardwareKind;
-use crate::system_config::SYSTEM_CONFIG;
+use crate::system_constants::SYSTEM_CONSTANTS;
 
 #[derive(Serialize, Deserialize)]
 struct Configuration {
@@ -213,8 +213,8 @@ impl AutoDrum {
 
     fn handle_read_system_constants_command(&mut self, value: &Vec<u8>) -> Result<(), Box<dyn Error>> {
         println!("Received read system constants command: {:?}", value);
-        let stringified_config = serde_json::to_string(&SYSTEM_CONFIG.clone())?;
-        self.midi_ble_manager.send(&stringified_config)
+        let stringified_const_map = serde_json::to_string(&SYSTEM_CONSTANTS.clone())?;
+        self.midi_ble_manager.send(&stringified_const_map)
     }
 
     /// Collect & serialize the current configuration of the AutoDrum instance then send it over BLE
